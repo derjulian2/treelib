@@ -800,12 +800,27 @@ namespace trl
             flex_tree_impl__ impl_M_;
         };
 
+
+
         template <typename IterTp__>
-        concept is_flex_tree_iterator__ = requires (IterTp__ iter__) 
+        struct iter_util__
         {
-            { iter__.node_ptr_M_() } -> std::convertible_to<const flex_tree_node_base__*>;
+            static typename IterTp__::base_ptr_T_ get_node_ptr_M_(const IterTp__& iter__)
+            { return iter__.node_ptr_M_(); }
+
+            static IterTp__ construct_from_ptr_M_(typename IterTp__::base_ptr_T_ ptr__)
+            { return IterTp__(ptr__); }
         };
 
+        template <typename IterTp__>
+        struct iter_util__<std::reverse_iterator<IterTp__>>
+        {
+            static typename IterTp__::base_ptr_T_ get_node_ptr_M_(const std::reverse_iterator<IterTp__>& iter__)
+            { return iter__.base().node_ptr_M_(); }
+
+            static std::reverse_iterator<IterTp__> construct_from_ptr_M_(typename IterTp__::base_ptr_T_ ptr__)
+            { return std::reverse_iterator<IterTp__>(IterTp__(ptr__)); }
+        };
     }
 
 
@@ -817,262 +832,186 @@ namespace trl
     struct node_traits
     {
 
-        /**
-         * @note
-         * this struct provides concept/SFINAE-overloads for regular flex_tree-iterators and reverse_iterators that are
-         * generated using std::reverse_iterator adaptors. these provide the underlying node_ptr_M_ via .base(),
-         * which is why these overloads are required for redirection.
-         *
-         * while this is a lot of code, it allows for easy-syntax for every kind of iterator:
-         *
-         * 'trl::node_traits::parent(iter)' works for every 'flex_tree<>::iterator<>', '::const_iterator<>', '::reverse_iterator<>'
-         * which are all templated on the algorithm that is used.
-         */
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static IteratorType
         parent(IteratorType iter) 
-        { 
+        {
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
-            if (iter.node_ptr_M_()->is_root_M_()) { throw std::logic_error("root-node cannot have a parent-node"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
+            if (ptr__->is_root_M_()) { throw std::logic_error("root-node cannot have a parent-node"); }
         #endif
-            assert(iter.node_ptr_M_());
-            assert(!iter.node_ptr_M_()->is_root_M_()); 
-            return IteratorType(iter.node_ptr_M_()->parent_M_);  
+            assert(ptr__);
+            assert(!ptr__->is_root_M_()); 
+            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
         }
 
-        template <typename ReverseIteratorType>
-        static ReverseIteratorType
-        parent(ReverseIteratorType iter)
-        { return ReverseIteratorType(parent(iter.base())); }
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static IteratorType
         next(IteratorType iter)
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
-            if (!iter.node_ptr_M_()->has_next_M_()) { throw std::logic_error("node does not have a next node"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
+            if (!ptr__->has_next_M_()) { throw std::logic_error("node does not have a next node"); }
         #endif
-            assert(iter.node_ptr_M_()); 
-            assert(iter.node_ptr_M_()->has_next_M_()); 
-            return IteratorType(iter.node_ptr_M_()->next_M_); 
+            assert(ptr__); 
+            assert(ptr__->has_next_M_()); 
+            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
         }
 
-        template <typename ReverseIteratorType>
-        static ReverseIteratorType
-        next(ReverseIteratorType iter)
-        { return ReverseIteratorType(next(iter.base())); }
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static IteratorType
         previous(IteratorType iter)
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
-            if (!iter.node_ptr_M_()->has_prev_M_()) { throw std::logic_error("node does not have a previous node"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
+            if (!ptr__->has_prev_M_()) { throw std::logic_error("node does not have a previous node"); }
         #endif
-            assert(iter.node_ptr_M_()); 
-            assert(iter.node_ptr_M_()->has_prev_M_()); 
-            return IteratorType(iter.node_ptr_M_()->prev_M_); 
+            assert(ptr__); 
+            assert(ptr__->has_prev_M_()); 
+            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
         }
 
-        template <typename ReverseIteratorType>
-        static ReverseIteratorType
-        previous(ReverseIteratorType iter)
-        { return ReverseIteratorType(previous(iter.base())); }
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static IteratorType
         first_child(IteratorType iter)
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
-            if (!iter.node_ptr_M_()->has_children_M_()) { throw std::logic_error("node does not have any child-nodes"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
+            if (!ptr__->has_children_M_()) { throw std::logic_error("node does not have any child-nodes"); }
         #endif
-            assert(iter.node_ptr_M_()); 
-            assert(iter.node_ptr_M_()->has_children_M_()); 
-            return IteratorType(iter.node_ptr_M_()->first_child_M_); 
+            assert(ptr__); 
+            assert(ptr__->has_children_M_()); 
+            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
         }
 
-        template <typename ReverseIteratorType>
-        static ReverseIteratorType
-        first_child(ReverseIteratorType iter)
-        { return ReverseIteratorType(first_child(iter.base())); }
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static IteratorType
         last_child(IteratorType iter)
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
-            if (!iter.node_ptr_M_()->has_children_M_()) { throw std::logic_error("node does not have any child-nodes"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
+            if (!ptr__->has_children_M_()) { throw std::logic_error("node does not have any child-nodes"); }
         #endif
-            assert(iter.node_ptr_M_()); 
-            assert(iter.node_ptr_M_()->has_children_M_()); 
-            return IteratorType(iter.node_ptr_M_()->last_child_M_);  
+            assert(ptr__); 
+            assert(ptr__->has_children_M_()); 
+            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
         }
 
-        template <typename ReverseIteratorType>
-        static ReverseIteratorType
-        last_child(ReverseIteratorType iter)
-        { return ReverseIteratorType(parent(iter.base())); }
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static std::size_t 
         depth(IteratorType iter)
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
         #endif
-            assert(iter.node_ptr_M_()); 
-            return iter.node_ptr_M_()->depth_M_(); 
+            assert(ptr__); 
+            return ptr__->depth_M_(); 
         }
 
-        template <typename ReverseIteratorType>
-        static std::size_t
-        depth(ReverseIteratorType iter)
-        { return depth(iter.base()); }
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static std::size_t 
         child_count(IteratorType iter) 
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
         #endif
-            assert(iter.node_ptr_M_()); 
-            return iter.node_ptr_M_()->child_count_M_; 
+            assert(ptr__); 
+            return ptr__->child_count_M_; 
         }
 
-        template <typename ReverseIteratorType>
-        static std::size_t
-        child_count(ReverseIteratorType iter)
-        { return child_count(iter.base()); }
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static bool 
         is_root(IteratorType iter)
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
         #endif
-            assert(iter.node_ptr_M_()); 
-            return iter.node_ptr_M_()->is_root_M_(); 
+            assert(ptr__); 
+            return ptr__->is_root_M_(); 
         }
 
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static bool 
         is_first_child(IteratorType iter)
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
         #endif
-            assert(iter.node_ptr_M_()); 
-            return iter.node_ptr_M_()->is_first_child_M_(); 
+            assert(ptr__); 
+            return ptr__->is_first_child_M_(); 
         }
 
-        template <typename ReverseIteratorType>
-        static bool
-        is_first_child(ReverseIteratorType iter)
-        { return is_first_child(iter.base()); }
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static bool 
         is_last_child(IteratorType iter)
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
         #endif
-            assert(iter.node_ptr_M_()); 
-            return iter.node_ptr_M_()->is_last_child_M_();
+            assert(ptr__); 
+            return ptr__->is_last_child_M_();
         }
 
-        template <typename ReverseIteratorType>
-        static bool
-        is_last_child(ReverseIteratorType iter)
-        { return is_last_child(iter.base()); }
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static bool 
         has_next(IteratorType iter)
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
         #endif
-            assert(iter.node_ptr_M_()); 
-            return iter.node_ptr_M_()->has_next_M_();
+            assert(ptr__); 
+            return ptr__->has_next_M_();
         }
 
-        template <typename ReverseIteratorType>
-        static bool
-        has_next(ReverseIteratorType iter)
-        { return has_next(iter.base()); }
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static bool 
         has_previous(IteratorType iter) 
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
         #endif
-            assert(iter.node_ptr_M_()); 
-            return iter.node_ptr_M_()->has_prev_M_();
+            assert(ptr__); 
+            return ptr__->has_prev_M_();
         }
 
-        template <typename ReverseIteratorType>
-        static bool
-        has_previous(ReverseIteratorType iter)
-        { return has_previous(iter.base()); }
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static bool 
         has_children(IteratorType iter) 
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
         #endif
-            assert(iter.node_ptr_M_()); 
-            return iter.node_ptr_M_()->has_children_M_(); 
+            assert(ptr__); 
+            return ptr__->has_children_M_(); 
         }
 
-        template <typename ReverseIteratorType>
-        static bool
-        has_children(ReverseIteratorType iter)
-        { return has_children(iter.base()); }
-
         template <typename IteratorType>
-            requires detail__::is_flex_tree_iterator__<IteratorType>
         static bool 
         is_only_child(IteratorType iter)
         { 
+            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
-            if (iter.node_ptr_M_()->is_root_M_()) { throw std::logic_error("root-node cannot be an only-child"); }
+            if (!ptr__) { throw std::logic_error("invalid iterator"); }
+            if (ptr__->is_root_M_()) { throw std::logic_error("root-node cannot be an only-child"); }
         #endif
-            assert(iter.node_ptr_M_());
-            assert(!iter.node_ptr_M_()->is_root_M_());
-            return iter.node_ptr_M_()->is_only_child_M_(); 
+            assert(ptr__);
+            assert(!ptr__->is_root_M_());
+            return ptr__->is_only_child_M_(); 
         }
 
-        template <typename ReverseIteratorType>
-        static bool
-        is_only_child(ReverseIteratorType iter)
-        { return is_only_child(iter.base()); }
     };
 
     /**

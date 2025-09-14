@@ -40,8 +40,8 @@ int trl::tests::flex_tree_test()
     cbeg = beg;
     bool b = (beg == beg2);
 
-    trl::node_traits::parent(beg);
     /* conversions possible */
+    trl::node_traits::parent(beg);
     trl::flex_tree<std::string>::reverse_iterator<breadth_first_in_order> r = trl::node_traits::parent(rbeg);
 
     static_assert(std::input_iterator<flex_tree<std::string>::iterator<>>);
