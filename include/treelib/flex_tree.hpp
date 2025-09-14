@@ -11,14 +11,16 @@
  *
  * @details
  * compile-options:
- * - #define TRL_FLEX_TREE_FAST_DEPTH :
+ * - #define TRL_FLEX_TREE_FAST_DEPTH
  *   includes .depth as a member-field of every node in the tree. provides faster access to depth() value, but also additional bookkeeping.
- * - #define NDEBUG (should happen automatically for your compiler if you compile for release):
- *   removes additional debug-asserts and measures.
- * - #define TRL_FLEX_TREE_NO_RECURSION :
+ * - #define TRL_FLEX_TREE_NO_RECURSION
  *   some algorithms like node-copying or node-erasure use recursion to jump through every child-node. 
  *   this flag will make them use the same depth-first iteration algorithm that flex_tree::iterator<depth_first_post_order> uses.
- *
+ * - #define TRL_FLEX_TREE_NOEXCEPT
+ *   disables exception-safety for invalid operations on a tree.
+ * - #define NDEBUG (defined in release-builds)
+ *   disables debug-asserts for invalid operations on a tree.
+ * 
  * naming-schemes:
  * - 'name__' describes an implementation namespace or type used internally by the implementation.
  * - 'typename_T_' describes a private member typename used internally by the implementation.
@@ -31,14 +33,17 @@
  * - friend relations with iterator
  * - fix iterator redefinition stuff
  * - traversal algorithms
- * - find better name than TreePlusPlus. copilot suggested arborxml. fleXML ? fleXibleML ? i kinda like the latin idea: nemusXML : nemus = 'the forest'
+ * - add compile-option TRL_FLEX_TREE_NOEXCEPT and exceptions for assert-handling
  */
 /********************************/
+#include <cmath>
 #include <concepts>
+#include <cstddef>
 #include <memory>
 #include <iterator>
 #include <initializer_list>
 #include <type_traits>
+#include <stdexcept>
 #include <cassert>
 /********************************/
 namespace trl
@@ -66,7 +71,7 @@ namespace trl
              */
 
             base_pointer_T_ parent_M_{nullptr};
-            base_pointer_T_ first_child_M_{nullptr}; /* maybe change to 'this' so begin() can always return first_child_M_ */
+            base_pointer_T_ first_child_M_{nullptr};
             base_pointer_T_ last_child_M_{nullptr};
             base_pointer_T_ next_M_{nullptr};
             base_pointer_T_ prev_M_{nullptr};
@@ -117,11 +122,11 @@ namespace trl
 
             bool 
             is_first_child_M_() const
-            { assert(!this->is_root_M_()); return this->has_prev_M_() ? this->prev_M_->parent_M_ != this->parent_M_ : true; }
+            { return this->has_prev_M_() ? this->prev_M_->parent_M_ != this->parent_M_ : true; }
             
             bool 
             is_last_child_M_() const
-            { assert(!this->is_root_M_()); return this->has_next_M_() ? this->next_M_->parent_M_ != this->parent_M_ : true; }
+            { return this->has_next_M_() ? this->next_M_->parent_M_ != this->parent_M_ : true; }
             
             bool 
             has_next_M_() const
@@ -137,7 +142,7 @@ namespace trl
 
             bool 
             is_only_child_M_() const 
-            { assert(!this->is_root_M_()); return this->parent_M_->child_count_M_ == 1ull;}
+            { return this->parent_M_->child_count_M_ == 1ull;}
 
             /*
              * hooking / unhooking - bookkeeping subroutines
@@ -211,7 +216,6 @@ namespace trl
             void 
             entangle_M_(base_pointer_T_ next__)
             {
-                assert(next__);
                 this->next_M_ = next__;
                 next__->prev_M_ = this;
             }
@@ -263,7 +267,6 @@ namespace trl
             void 
             hook_as_next_sibling_M_(base_pointer_T_ prev__)
             {
-                assert(!prev__->is_root_M_());
                 if (prev__->is_last_child_M_()) 
                 { this->hook_as_last_child_M_(prev__->parent_M_); }
                 else
@@ -276,7 +279,6 @@ namespace trl
             void 
             hook_as_prev_sibling_M_(base_pointer_T_ next__)
             {
-                assert(!next__->is_root_M_());
                 if (next__->is_first_child_M_())
                 { this->hook_as_first_child_M_(next__->parent_M_); }
                 else
@@ -317,7 +319,6 @@ namespace trl
             void 
             unhook_M_()
             {
-                assert(!this->is_root_M_());
                 if (this->is_only_child_M_()) // has no siblings/cousins
                 { this->unhook_as_only_child_M_(); }
                 else if (this->has_prev_M_() && this->has_next_M_()) // has both
@@ -575,87 +576,6 @@ namespace trl
         };
 
         /**
-         * @brief 
-         * inteface that provides access to information about a node's placement in the tree.
-         */
-        template <typename IterTp__>
-        class flex_tree_node_props__
-        {
-            friend IterTp__;
-
-        public:
-
-            using iterator_type = IterTp__;
-
-        private:
-
-            using base_ptr_T_ = typename iterator_type::base_ptr_T_;
-
-            base_ptr_T_ ptr_M_{nullptr};
-
-            /* should not be instantiated by the user */
-            flex_tree_node_props__(base_ptr_T_ ptr) : ptr_M_(ptr) { }
-
-        public:
-
-            iterator_type 
-            parent() const 
-            { assert(this->ptr_M_); assert(!this->ptr_M_->is_root_M_()); return this->ptr_M_->parent_M_;  }
-
-            iterator_type 
-            next() const 
-            { assert(this->ptr_M_); assert(this->ptr_M_->has_next_M_()); return this->ptr_M_->next_M_; }
-
-            iterator_type 
-            previous() const 
-            { assert(this->ptr_M_); assert(this->ptr_M_->has_prev_M_()); return this->ptr_M_->prev_M_; }
-
-            iterator_type 
-            first_child() const 
-            { assert(this->ptr_M_); assert(this->ptr_M_->has_children_M_()); return this->ptr_M_->first_child_M_; }
-
-            iterator_type 
-            last_child() const 
-            { assert(this->ptr_M_); assert(this->ptr_M_->has_children_M_()); return this->ptr_M_->last_child_M_;  }
-
-            std::size_t 
-            depth() const 
-            { assert(this->ptr_M_); return this->ptr_M_->depth_M_(); }
-
-            std::size_t 
-            child_count() const 
-            { assert(this->ptr_M_); return this->ptr_M_->child_count_M_; }
-
-            bool 
-            is_root() const 
-            { assert(this->ptr_M_); return this->ptr_M_->is_root_M_(); }
-
-            bool 
-            is_first_child() const 
-            { assert(this->ptr_M_); return this->ptr_M_->is_first_child_M_(); }
-
-            bool 
-            is_last_child() const 
-            { assert(this->ptr_M_); return this->ptr_M_->is_last_child_M_(); }
-
-            bool 
-            has_next() const 
-            { assert(this->ptr_M_); return this->ptr_M_->has_next_M_(); }
-
-            bool 
-            has_previous() const 
-            { assert(this->ptr_M_); return this->ptr_M_->has_prev_M_(); }
-
-            bool 
-            has_children() const 
-            { assert(this->ptr_M_); return this->ptr_M_->has_children_M_(); }
-
-            bool 
-            is_only_child() const 
-            { assert(this->ptr_M_); return this->ptr_M_->is_only_child_M_(); }
-        };
-
-        /**
          * @brief an iterator to a flex_tree.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
          */
@@ -664,119 +584,90 @@ namespace trl
         {
 
             using iterator_category = std::bidirectional_iterator_tag;
-            using value_type = ValTp__;
+            using value_type = std::conditional<Const__, const ValTp__, ValTp__>::type;
             using difference_type = std::ptrdiff_t;
             using pointer = value_type*;
             using reference = value_type&;
-            using node_properties = flex_tree_node_props__<flex_tree_iterator__>;
-
-
-            /* iterator of same value_type and constness (only differ in iteration-algorithm)*/
-            template <traversal STrav__>
-            using strict_similiar_T_ = flex_tree_iterator__<STrav__, value_type, Const__>;
-
-            /* iterator of same value_type (differ in iteration-algorithm and constness)*/
-            template <traversal STrav__, bool SConst__>
-            using similiar_T_ = flex_tree_iterator__<STrav__, value_type, SConst__>;
             
-            using node_base_T_ = std::conditional<Const__, const flex_tree_node_base__, flex_tree_node_base__>::type;
-            using node_ptr_T_ = flex_tree_node__<ValTp__>*;
-            using base_ptr_T_ = node_base_T_*;
+            using node_ptr_T_ = std::conditional<Const__, const flex_tree_node__<ValTp__>*, flex_tree_node__<ValTp__>>::type;
+            using base_ptr_T_ = std::conditional<Const__, const flex_tree_node_base__*, flex_tree_node_base__*>::type;
 
             using self_T_ = flex_tree_iterator__;
             using self_ref_T_ = self_T_&;
 
             base_ptr_T_ ptr_M_{nullptr};
-            
-        #ifndef NDEBUG
-            /* debug-pointer to check for mismatched iterators belonging to different trees */
-            base_ptr_T_ header_ptr_M_{nullptr};
 
-            flex_tree_iterator__(base_ptr_T_ ptr__, base_ptr_T_ header__) noexcept
-                : ptr_M_(ptr__), header_ptr_M_(header__) { }
-        #endif
+            explicit flex_tree_iterator__(base_ptr_T_ ptr__) noexcept 
+                : ptr_M_(ptr__) 
+            { }
 
-            flex_tree_iterator__(base_ptr_T_ ptr__) noexcept 
-                : ptr_M_(ptr__) { }
+            /* const-iterator construction from non-const-iterator */
+            template <traversal OTrav__>
+                requires Const__
+            flex_tree_iterator__(const flex_tree_iterator__<OTrav__, ValTp__, false>& other) noexcept
+                : ptr_M_(other.ptr_M_)
+            { }
+
+            /* iterator conversions between algorithms */
+            template <traversal OTrav__>
+            flex_tree_iterator__(const flex_tree_iterator__<OTrav__, ValTp__, Const__>& other) noexcept
+                : ptr_M_(other.ptr_M_)
+            { }
             
-            operator base_ptr_T_() 
+            operator base_ptr_T_() noexcept
             { return ptr_M_; }
 
+            base_ptr_T_
+            node_ptr_M_() const noexcept
+            { return ptr_M_; }
 
-            /* iterators of different traversal algorithms (but of same constness) are convertible to each other */
-            template <traversal OTrav__>
-            flex_tree_iterator__(const strict_similiar_T_<OTrav__>& other) noexcept : ptr_M_(other.ptr_M_) { }
-
-            template <traversal OTrav__>
-            self_ref_T_ operator=(strict_similiar_T_<OTrav__> other) noexcept 
-            { swap(other, *this); return *this; }
-
-            /* const-iterators are constructible from non-const iterators, but not vice-versa */
-            template <traversal OTrav__>
-                requires Const__
-            flex_tree_iterator__(const similiar_T_<OTrav__, false>& other) noexcept : ptr_M_(other.ptr_M_) { }
-
-            template <traversal OTrav__>
-                requires Const__
-            self_ref_T_ operator=(similiar_T_<OTrav__, false>& other) noexcept 
-            { swap(other, *this); return *this; }
-
-
+            [[nodiscard]]
             reference 
-            operator*() const 
+            operator*() const noexcept
             { 
                 assert(this->ptr_M_);
                 assert(!this->ptr_M_->is_root_M_()); /* downcast will cause UB on end()-node. check only in debug. */
                 return static_cast<node_ptr_T_>(this->ptr_M_)->value_M_; 
             }
             
+            [[nodiscard]]
             pointer 
-            operator->() const 
+            operator->() const noexcept
             { 
                 assert(this->ptr_M_);
                 assert(!this->ptr_M_->is_root_M_()); /* downcast will cause UB on end()-node. check only in debug. */
                 return std::addressof(static_cast<node_ptr_T_>(this->ptr_M_)->value_M_); 
             }
 
-            self_ref_T_ 
-            operator++() 
+            self_ref_T_
+            operator++() noexcept
             { this->ptr_M_ = traversal_algorithm__<Trav__>::next_M_(this->ptr_M_); return *this; }
 
             self_T_
-            operator++(int) 
+            operator++(int) noexcept
             { self_T_ old__(*this); ++(*this); return old__;  }
 
             self_ref_T_ 
-            operator--() 
+            operator--() noexcept
             { this->ptr_M_ = traversal_algorithm__<Trav__>::prev_M_(this->ptr_M_); return *this; }
 
             self_T_
-            operator--(int) 
+            operator--(int) noexcept
             { self_T_ old__(*this); --(*this); return old__; }
 
-            /* iterators should be comparable even if they differ in algorithm or constness (only of different value is nonsensical) */
-            template <traversal TravA__, traversal TravB__, bool ConstA__, bool ConstB__>
+            /* iterators should be comparable even if they differ in algorithm or constness */
+            template <traversal OTrav__, bool OConst__>
             friend bool 
-            operator==(const similiar_T_<TravA__, ConstA__>& i, 
-                       const similiar_T_<TravB__, ConstB__>& j) noexcept
+            operator==(const flex_tree_iterator__<Trav__, ValTp__, Const__>& i, 
+                       const flex_tree_iterator__<OTrav__, ValTp__, OConst__>& j) noexcept
             { return i.ptr_M_ == j.ptr_M_; }
            
-            template <traversal TravA__, traversal TravB__, bool ConstA__, bool ConstB__>
+            template <traversal OTrav__, bool OConst__>
             friend bool 
-            operator!=(const similiar_T_<TravA__, ConstA__>& i, 
-                       const similiar_T_<TravB__, ConstB__>& j) noexcept
+            operator!=(const flex_tree_iterator__<Trav__, ValTp__, Const__>& i, 
+                       const flex_tree_iterator__<OTrav__, ValTp__, OConst__>& j) noexcept
             { return !(i == j); } 
             
-            /* iterators of different traversal-algorithms should still be comparable */
-            template <traversal TravA__, traversal TravB__>
-            friend void 
-            swap(strict_similiar_T_<TravA__>& a, strict_similiar_T_<TravB__>& b) noexcept 
-            { std::swap(a.ptr_M_, b.ptr_M_); }
-
-            node_properties 
-            examine_node() const 
-            { return node_properties(this->ptr_M_); }
-
         };
 
         /**
@@ -816,7 +707,7 @@ namespace trl
                 }
 
                 node_alloc_T_& 
-                get_node_alloc_M_() 
+                get_node_alloc_M_()
                 { return *this; }
                 
                 const node_alloc_T_& 
@@ -909,7 +800,280 @@ namespace trl
             flex_tree_impl__ impl_M_;
         };
 
+        template <typename IterTp__>
+        concept is_flex_tree_iterator__ = requires (IterTp__ iter__) 
+        {
+            { iter__.node_ptr_M_() } -> std::convertible_to<const flex_tree_node_base__*>;
+        };
+
     }
+
+
+
+    /**
+     * @brief
+     * provides (optionally exception-safe) information about a node's placement in a tree.
+     */
+    struct node_traits
+    {
+
+        /**
+         * @note
+         * this struct provides concept/SFINAE-overloads for regular flex_tree-iterators and reverse_iterators that are
+         * generated using std::reverse_iterator adaptors. these provide the underlying node_ptr_M_ via .base(),
+         * which is why these overloads are required for redirection.
+         *
+         * while this is a lot of code, it allows for easy-syntax for every kind of iterator:
+         *
+         * 'trl::node_traits::parent(iter)' works for every 'flex_tree<>::iterator<>', '::const_iterator<>', '::reverse_iterator<>'
+         * which are all templated on the algorithm that is used.
+         */
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static IteratorType
+        parent(IteratorType iter) 
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (iter.node_ptr_M_()->is_root_M_()) { throw std::logic_error("root-node cannot have a parent-node"); }
+        #endif
+            assert(iter.node_ptr_M_());
+            assert(!iter.node_ptr_M_()->is_root_M_()); 
+            return IteratorType(iter.node_ptr_M_()->parent_M_);  
+        }
+
+        template <typename ReverseIteratorType>
+        static ReverseIteratorType
+        parent(ReverseIteratorType iter)
+        { return ReverseIteratorType(parent(iter.base())); }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static IteratorType
+        next(IteratorType iter)
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (!iter.node_ptr_M_()->has_next_M_()) { throw std::logic_error("node does not have a next node"); }
+        #endif
+            assert(iter.node_ptr_M_()); 
+            assert(iter.node_ptr_M_()->has_next_M_()); 
+            return IteratorType(iter.node_ptr_M_()->next_M_); 
+        }
+
+        template <typename ReverseIteratorType>
+        static ReverseIteratorType
+        next(ReverseIteratorType iter)
+        { return ReverseIteratorType(next(iter.base())); }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static IteratorType
+        previous(IteratorType iter)
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (!iter.node_ptr_M_()->has_prev_M_()) { throw std::logic_error("node does not have a previous node"); }
+        #endif
+            assert(iter.node_ptr_M_()); 
+            assert(iter.node_ptr_M_()->has_prev_M_()); 
+            return IteratorType(iter.node_ptr_M_()->prev_M_); 
+        }
+
+        template <typename ReverseIteratorType>
+        static ReverseIteratorType
+        previous(ReverseIteratorType iter)
+        { return ReverseIteratorType(previous(iter.base())); }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static IteratorType
+        first_child(IteratorType iter)
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (!iter.node_ptr_M_()->has_children_M_()) { throw std::logic_error("node does not have any child-nodes"); }
+        #endif
+            assert(iter.node_ptr_M_()); 
+            assert(iter.node_ptr_M_()->has_children_M_()); 
+            return IteratorType(iter.node_ptr_M_()->first_child_M_); 
+        }
+
+        template <typename ReverseIteratorType>
+        static ReverseIteratorType
+        first_child(ReverseIteratorType iter)
+        { return ReverseIteratorType(first_child(iter.base())); }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static IteratorType
+        last_child(IteratorType iter)
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (!iter.node_ptr_M_()->has_children_M_()) { throw std::logic_error("node does not have any child-nodes"); }
+        #endif
+            assert(iter.node_ptr_M_()); 
+            assert(iter.node_ptr_M_()->has_children_M_()); 
+            return IteratorType(iter.node_ptr_M_()->last_child_M_);  
+        }
+
+        template <typename ReverseIteratorType>
+        static ReverseIteratorType
+        last_child(ReverseIteratorType iter)
+        { return ReverseIteratorType(parent(iter.base())); }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static std::size_t 
+        depth(IteratorType iter)
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+        #endif
+            assert(iter.node_ptr_M_()); 
+            return iter.node_ptr_M_()->depth_M_(); 
+        }
+
+        template <typename ReverseIteratorType>
+        static std::size_t
+        depth(ReverseIteratorType iter)
+        { return depth(iter.base()); }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static std::size_t 
+        child_count(IteratorType iter) 
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+        #endif
+            assert(iter.node_ptr_M_()); 
+            return iter.node_ptr_M_()->child_count_M_; 
+        }
+
+        template <typename ReverseIteratorType>
+        static std::size_t
+        child_count(ReverseIteratorType iter)
+        { return child_count(iter.base()); }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static bool 
+        is_root(IteratorType iter)
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+        #endif
+            assert(iter.node_ptr_M_()); 
+            return iter.node_ptr_M_()->is_root_M_(); 
+        }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static bool 
+        is_first_child(IteratorType iter)
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+        #endif
+            assert(iter.node_ptr_M_()); 
+            return iter.node_ptr_M_()->is_first_child_M_(); 
+        }
+
+        template <typename ReverseIteratorType>
+        static bool
+        is_first_child(ReverseIteratorType iter)
+        { return is_first_child(iter.base()); }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static bool 
+        is_last_child(IteratorType iter)
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+        #endif
+            assert(iter.node_ptr_M_()); 
+            return iter.node_ptr_M_()->is_last_child_M_();
+        }
+
+        template <typename ReverseIteratorType>
+        static bool
+        is_last_child(ReverseIteratorType iter)
+        { return is_last_child(iter.base()); }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static bool 
+        has_next(IteratorType iter)
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+        #endif
+            assert(iter.node_ptr_M_()); 
+            return iter.node_ptr_M_()->has_next_M_();
+        }
+
+        template <typename ReverseIteratorType>
+        static bool
+        has_next(ReverseIteratorType iter)
+        { return has_next(iter.base()); }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static bool 
+        has_previous(IteratorType iter) 
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+        #endif
+            assert(iter.node_ptr_M_()); 
+            return iter.node_ptr_M_()->has_prev_M_();
+        }
+
+        template <typename ReverseIteratorType>
+        static bool
+        has_previous(ReverseIteratorType iter)
+        { return has_previous(iter.base()); }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static bool 
+        has_children(IteratorType iter) 
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+        #endif
+            assert(iter.node_ptr_M_()); 
+            return iter.node_ptr_M_()->has_children_M_(); 
+        }
+
+        template <typename ReverseIteratorType>
+        static bool
+        has_children(ReverseIteratorType iter)
+        { return has_children(iter.base()); }
+
+        template <typename IteratorType>
+            requires detail__::is_flex_tree_iterator__<IteratorType>
+        static bool 
+        is_only_child(IteratorType iter)
+        { 
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!iter.node_ptr_M_()) { throw std::logic_error("invalid iterator"); }
+            if (iter.node_ptr_M_()->is_root_M_()) { throw std::logic_error("root-node cannot be an only-child"); }
+        #endif
+            assert(iter.node_ptr_M_());
+            assert(!iter.node_ptr_M_()->is_root_M_());
+            return iter.node_ptr_M_()->is_only_child_M_(); 
+        }
+
+        template <typename ReverseIteratorType>
+        static bool
+        is_only_child(ReverseIteratorType iter)
+        { return is_only_child(iter.base()); }
+    };
 
     /**
      * @brief C++ STL-like implementation of a flexible arbitrary-ary tree-data-structure.
@@ -928,26 +1092,19 @@ namespace trl
         using allocator_type = Allocator;
         using initializer_type = detail__::flex_tree_node_initializer__<Allocator>;
 
+
         template <traversal Traversal = default_traversal>
         using iterator = detail__::flex_tree_iterator__<Traversal, value_type, false>;
 
         template <traversal Traversal = default_traversal>
         using const_iterator = detail__::flex_tree_iterator__<Traversal, value_type, true>;
-        
 
         template <traversal Traversal = default_traversal>
         using reverse_iterator = std::reverse_iterator<iterator<Traversal>>;
 
         template <traversal Traversal = default_traversal>
         using const_reverse_iterator = std::reverse_iterator<const_iterator<Traversal>>;
-
-
-        template <traversal Traversal = default_traversal>
-        using node_properties = detail__::flex_tree_node_props__<iterator<Traversal>>;
-                
-        template <traversal Traversal = default_traversal>
-        using const_node_properties = detail__::flex_tree_node_props__<const_iterator<Traversal>>;
-
+        
     protected:
 
         using node_T_ = detail__::flex_tree_node__<value_type>;
@@ -1032,13 +1189,7 @@ namespace trl
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
         begin() 
-        { 
-        #ifndef NDEBUG
-            return iterator<Traversal>(this->impl_M_.header_M_.has_children_M_() ? this->impl_M_.header_M_.first_child_M_ : &this->impl_M_.header_M_, &this->impl_M_.header_M_);
-        #else
-            return iterator<Traversal>(this->impl_M_.header_M_.has_children_M_() ? this->impl_M_.header_M_.first_child_M_ : &this->impl_M_.header_M_);
-        #endif
-        }
+        { return iterator<Traversal>(this->impl_M_.header_M_.has_children_M_() ? this->impl_M_.header_M_.first_child_M_ : &this->impl_M_.header_M_); }
         
         /**
          * @brief provides const-iterators to traverse the tree.
@@ -1048,13 +1199,7 @@ namespace trl
         template <traversal Traversal = default_traversal>
         const_iterator<Traversal> 
         cbegin() const 
-        { 
-        #ifndef NDEBUG
-            return const_iterator<Traversal>(this->impl_M_.header_M_.has_children_M_() ? this->impl_M_.header_M_.first_child_M_ : &this->impl_M_.header_M_, &this->impl_M_.header_M_); 
-        #else
-            return const_iterator<Traversal>(this->impl_M_.header_M_.has_children_M_() ? this->impl_M_.header_M_.first_child_M_ : &this->impl_M_.header_M_);
-        #endif
-        }
+        { return const_iterator<Traversal>(this->impl_M_.header_M_.has_children_M_() ? this->impl_M_.header_M_.first_child_M_ : &this->impl_M_.header_M_); }
 
         /**
          * @brief provides iterators to traverse the tree.
@@ -1064,13 +1209,7 @@ namespace trl
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
         end() 
-        { 
-        #ifndef NDEBUG
-            return iterator<Traversal>(&this->impl_M_.header_M_, &this->impl_M_.header_M_); 
-        #else
-            return iterator<Traversal>(&this->impl_M_.header_M_); 
-        #endif
-        }
+        { return iterator<Traversal>(&this->impl_M_.header_M_); }
 
         /**
          * @brief provides const-iterators to traverse the tree.
@@ -1080,13 +1219,7 @@ namespace trl
         template <traversal Traversal = default_traversal>
         const_iterator<Traversal> 
         cend() const 
-        { 
-        #ifndef NDEBUG
-            return const_iterator<Traversal>(&this->impl_M_.header_M_, &this->impl_M_.header_M_); 
-        #else
-            return const_iterator<Traversal>(&this->impl_M_.header_M_);
-        #endif
-        }
+        { return const_iterator<Traversal>(&this->impl_M_.header_M_); }
 
         /**
          * @brief provides iterators to traverse the tree.
@@ -1096,7 +1229,7 @@ namespace trl
         template <traversal Traversal = default_traversal>
         reverse_iterator<Traversal> 
         rbegin() 
-        { return reverse_iterator<Traversal>(begin<Traversal>()); }
+        { return reverse_iterator<Traversal>(this->begin<Traversal>()); }
         
         /**
          * @brief provides const-iterators to traverse the tree.
@@ -1106,7 +1239,7 @@ namespace trl
         template <traversal Traversal = default_traversal>
         const_reverse_iterator<Traversal> 
         crbegin() const 
-        { return const_reverse_iterator<Traversal>(cbegin<Traversal>()); }
+        { return const_reverse_iterator(this->cbegin<Traversal>()); }
 
         /**
          * @brief provides iterators to traverse the tree.
@@ -1116,7 +1249,7 @@ namespace trl
         template <traversal Traversal = default_traversal>
         reverse_iterator<Traversal> 
         rend() 
-        { return reverse_iterator<Traversal>(end<Traversal>()); }
+        { return reverse_iterator<Traversal>(this->end<Traversal>()); }
 
         /**
          * @brief provides const-iterators to traverse the tree.
@@ -1126,7 +1259,7 @@ namespace trl
         template <traversal Traversal = default_traversal>
         const_reverse_iterator<Traversal> 
         crend() const 
-        { return const_reverse_iterator<Traversal>(cend<Traversal>()); }
+        { return const_reverse_iterator<Traversal>(this->cend<Traversal>()); }
 
         /*
          * modifiers
@@ -1149,6 +1282,9 @@ namespace trl
         {
             assert(where.ptr_M_);
             assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (!where.ptr_M_) { throw std::invalid_argument("invalid iterator"); }
+        #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(value);
             new__->hook_as_first_child_M_(where); ++this->impl_M_.header_M_.size_M_;
             return { new__, &this->impl_M_.header_M_ };
