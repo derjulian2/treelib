@@ -1,6 +1,7 @@
 #include "flex_tree_test.hpp"
 
 #include "../include/treelib/flex_tree.hpp"
+#include "../include/treelib/node_traits.hpp"
 #include <algorithm>
 #include <string>
 

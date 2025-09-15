@@ -3,7 +3,7 @@
 
 /**
  * @file    flex_tree.hpp
- * @date    11/09/2025
+ * @date    15/09/2025
  * @author  Julian Benzel
  *
  * @brief
@@ -18,6 +18,8 @@
  *   this flag will make them use the same depth-first iteration algorithm that flex_tree::iterator<depth_first_post_order> uses.
  * - #define TRL_FLEX_TREE_NOEXCEPT
  *   disables exception-safety for invalid operations on a tree.
+ * - #define TRL_FLEX_TREE_ITER_NOEXCEPT
+ *   disables exception-safety for iterators specifically. also disabled if TRL_FLEX_TREE_NOEXCEPT is defined.
  * - #define NDEBUG (defined in release-builds)
  *   disables debug-asserts for invalid operations on a tree.
  * 
@@ -31,12 +33,10 @@
  * - clean up: find right spots for assertions, review hook() unhook() code and unit-test, benchmark, document.
  * - enforce naming-schemes, decl-order and what not
  * - friend relations with iterator
- * - fix iterator redefinition stuff
  * - traversal algorithms
  * - add compile-option TRL_FLEX_TREE_NOEXCEPT and exceptions for assert-handling
  */
 /********************************/
-#include <cmath>
 #include <concepts>
 #include <cstddef>
 #include <memory>
@@ -115,6 +115,14 @@ namespace trl
                 return res__;
             #endif
             }
+
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            void 
+            update_depth_M_()
+            {
+
+            }
+        #endif
 
             bool 
             is_root_M_() const 
@@ -360,6 +368,8 @@ namespace trl
         #endif
 
         };
+
+
 
         /**
          * @brief traversal algorithms.
@@ -623,19 +633,35 @@ namespace trl
 
             [[nodiscard]]
             reference 
-            operator*() const noexcept
+            operator*() const
+        #if !defined(TRL_FLEX_TREE_NOEXCEPT) && !defined(TRL_FLEX_TREE_ITER_NOEXCEPT)
+            noexcept
+        #endif
             { 
+            #if !defined(TRL_FLEX_TREE_NOEXCEPT) && !defined(TRL_FLEX_TREE_ITER_NOEXCEPT)
+                if (!this->ptr_M_) { throw std::logic_error("invalid iterator"); }
+                if (this->ptr_M_->is_root_M_()) { throw std::logic_error("cannot dereference end()-iterator"); }
+            #else
                 assert(this->ptr_M_);
                 assert(!this->ptr_M_->is_root_M_()); /* downcast will cause UB on end()-node. check only in debug. */
+            #endif
                 return static_cast<node_ptr_T_>(this->ptr_M_)->value_M_; 
             }
             
             [[nodiscard]]
             pointer 
-            operator->() const noexcept
+            operator->() const 
+        #if !defined(TRL_FLEX_TREE_NOEXCEPT) && !defined(TRL_FLEX_TREE_ITER_NOEXCEPT)
+            noexcept
+        #endif
             { 
+            #if !defined(TRL_FLEX_TREE_NOEXCEPT) && !defined(TRL_FLEX_TREE_ITER_NOEXCEPT)
+                if (!this->ptr_M_) { throw std::logic_error("invalid iterator"); }
+                if (this->ptr_M_->is_root_M_()) { throw std::logic_error("cannot dereference end()-iterator"); }
+            #else
                 assert(this->ptr_M_);
                 assert(!this->ptr_M_->is_root_M_()); /* downcast will cause UB on end()-node. check only in debug. */
+            #endif
                 return std::addressof(static_cast<node_ptr_T_>(this->ptr_M_)->value_M_); 
             }
 
@@ -692,18 +718,18 @@ namespace trl
 
                 template <typename... Args__>
                 node_ptr_T_
-                get_node_M_(Args__&&... args_)
+                get_node_M_(Args__&&... args__)
                 {
                     node_ptr_T_ new_ = std::allocator_traits<node_alloc_T_>::allocate(this->get_node_alloc_M_(), 1);
-                    std::allocator_traits<node_alloc_T_>::construct(this->get_node_alloc_M_(), new_, std::forward<Args__>(args_)...);
+                    std::allocator_traits<node_alloc_T_>::construct(this->get_node_alloc_M_(), new_, std::forward<Args__>(args__)...);
                     return new_;
                 }
 
                 void
-                put_node_M_(node_ptr_T_ node_)
+                put_node_M_(node_ptr_T_ node__)
                 {
-                    std::allocator_traits<node_alloc_T_>::destroy(this->get_node_alloc_M_(), node_);
-                    std::allocator_traits<node_alloc_T_>::deallocate(this->get_node_alloc_M_(), node_, 1);
+                    std::allocator_traits<node_alloc_T_>::destroy(this->get_node_alloc_M_(), node__);
+                    std::allocator_traits<node_alloc_T_>::deallocate(this->get_node_alloc_M_(), node__, 1);
                 }
 
                 node_alloc_T_& 
@@ -799,220 +825,7 @@ namespace trl
 
             flex_tree_impl__ impl_M_;
         };
-
-
-
-        template <typename IterTp__>
-        struct iter_util__
-        {
-            static typename IterTp__::base_ptr_T_ get_node_ptr_M_(const IterTp__& iter__)
-            { return iter__.node_ptr_M_(); }
-
-            static IterTp__ construct_from_ptr_M_(typename IterTp__::base_ptr_T_ ptr__)
-            { return IterTp__(ptr__); }
-        };
-
-        template <typename IterTp__>
-        struct iter_util__<std::reverse_iterator<IterTp__>>
-        {
-            static typename IterTp__::base_ptr_T_ get_node_ptr_M_(const std::reverse_iterator<IterTp__>& iter__)
-            { return iter__.base().node_ptr_M_(); }
-
-            static std::reverse_iterator<IterTp__> construct_from_ptr_M_(typename IterTp__::base_ptr_T_ ptr__)
-            { return std::reverse_iterator<IterTp__>(IterTp__(ptr__)); }
-        };
     }
-
-
-
-    /**
-     * @brief
-     * provides (optionally exception-safe) information about a node's placement in a tree.
-     */
-    struct node_traits
-    {
-
-        template <typename IteratorType>
-        static IteratorType
-        parent(IteratorType iter) 
-        {
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-            if (ptr__->is_root_M_()) { throw std::logic_error("root-node cannot have a parent-node"); }
-        #endif
-            assert(ptr__);
-            assert(!ptr__->is_root_M_()); 
-            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
-        }
-
-        template <typename IteratorType>
-        static IteratorType
-        next(IteratorType iter)
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-            if (!ptr__->has_next_M_()) { throw std::logic_error("node does not have a next node"); }
-        #endif
-            assert(ptr__); 
-            assert(ptr__->has_next_M_()); 
-            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
-        }
-
-        template <typename IteratorType>
-        static IteratorType
-        previous(IteratorType iter)
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-            if (!ptr__->has_prev_M_()) { throw std::logic_error("node does not have a previous node"); }
-        #endif
-            assert(ptr__); 
-            assert(ptr__->has_prev_M_()); 
-            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
-        }
-
-        template <typename IteratorType>
-        static IteratorType
-        first_child(IteratorType iter)
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-            if (!ptr__->has_children_M_()) { throw std::logic_error("node does not have any child-nodes"); }
-        #endif
-            assert(ptr__); 
-            assert(ptr__->has_children_M_()); 
-            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
-        }
-
-        template <typename IteratorType>
-        static IteratorType
-        last_child(IteratorType iter)
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-            if (!ptr__->has_children_M_()) { throw std::logic_error("node does not have any child-nodes"); }
-        #endif
-            assert(ptr__); 
-            assert(ptr__->has_children_M_()); 
-            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
-        }
-
-        template <typename IteratorType>
-        static std::size_t 
-        depth(IteratorType iter)
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #endif
-            assert(ptr__); 
-            return ptr__->depth_M_(); 
-        }
-
-        template <typename IteratorType>
-        static std::size_t 
-        child_count(IteratorType iter) 
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #endif
-            assert(ptr__); 
-            return ptr__->child_count_M_; 
-        }
-
-        template <typename IteratorType>
-        static bool 
-        is_root(IteratorType iter)
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #endif
-            assert(ptr__); 
-            return ptr__->is_root_M_(); 
-        }
-
-        template <typename IteratorType>
-        static bool 
-        is_first_child(IteratorType iter)
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #endif
-            assert(ptr__); 
-            return ptr__->is_first_child_M_(); 
-        }
-
-        template <typename IteratorType>
-        static bool 
-        is_last_child(IteratorType iter)
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #endif
-            assert(ptr__); 
-            return ptr__->is_last_child_M_();
-        }
-
-        template <typename IteratorType>
-        static bool 
-        has_next(IteratorType iter)
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #endif
-            assert(ptr__); 
-            return ptr__->has_next_M_();
-        }
-
-        template <typename IteratorType>
-        static bool 
-        has_previous(IteratorType iter) 
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #endif
-            assert(ptr__); 
-            return ptr__->has_prev_M_();
-        }
-
-        template <typename IteratorType>
-        static bool 
-        has_children(IteratorType iter) 
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #endif
-            assert(ptr__); 
-            return ptr__->has_children_M_(); 
-        }
-
-        template <typename IteratorType>
-        static bool 
-        is_only_child(IteratorType iter)
-        { 
-            auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-            if (ptr__->is_root_M_()) { throw std::logic_error("root-node cannot be an only-child"); }
-        #endif
-            assert(ptr__);
-            assert(!ptr__->is_root_M_());
-            return ptr__->is_only_child_M_(); 
-        }
-
-    };
 
     /**
      * @brief C++ STL-like implementation of a flexible arbitrary-ary tree-data-structure.
@@ -1054,8 +867,9 @@ namespace trl
 
     public:
 
-        /*
-         * special member functions
+        /**
+         * @name constructors and special member functions
+         * @{
          */
 
         /**
@@ -1067,83 +881,131 @@ namespace trl
          * this requires node-allocation and i found no way to do this using the allocator contained in the tree itself (as it doesn't exist at the time the inner nodes are constructed).
          * @param ilist the initializer-list containing the values and node-hierarchy. see examples for a reference-usage.
          */
-        flex_tree(std::initializer_list<node_initializer_T_> ilist) noexcept
-            : flex_tree()
+        flex_tree(std::initializer_list<node_initializer_T_> ilist, const allocator_type& allocator = allocator_type()) noexcept
+            : flex_tree(allocator)
         { 
             this->impl_M_.header_M_.from_initializer_list_M_(ilist);
-            #ifdef TRL_FLEX_TREE_FAST_DEPTH
-            this->_M_impl._M_header._update_depth();
-            #endif
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            this->_M_impl._M_header.update_depth_M_();
+        #endif
         }
 
+        /**
+         * @brief initializer-list assignment.
+         */
         flex_tree& 
         operator=(std::initializer_list<node_initializer_T_> ilist) noexcept 
         { 
-            this->clear(); 
+            this->clear();
             this->impl_M_.header_M_.from_initializer_list_M_(ilist);
-            #ifdef TRL_FLEX_TREE_FAST_DEPTH
-            this->_M_impl._M_header._update_depth();
-            #endif
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            this->_M_impl._M_header.update_depth_M_();
+        #endif
         }
 
+        /**
+         * @brief subtree constructor from an iterator.
+         * @param where an iterator to the node to be copied with all of it's descendants. 
+         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @note exceptions are thrown / the behaviour is undefined if:
+         * - `where` is an `end()`-iterator.
+         */
+        template <traversal Traversal>
+        explicit flex_tree(const_iterator<Traversal> where, const allocator_type& allocator = allocator_type())
+            : flex_tree(allocator)
+        {
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
+        #else
+            assert(!where.node_ptr_M_()->is_root_M_());
+        #endif
+            this->impl_M_.copy_children_M_(&this->impl_M_.header_M_, where.node_ptr_M_());
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            this->_M_impl._M_header.update_depth_M_();
+        #endif
+        }
+
+        /**
+         * @brief default constructor.
+         */
         flex_tree(const allocator_type& allocator = allocator_type()) noexcept 
             : detail__::flex_tree_base__<Type, Allocator>(allocator)
         { }
         
+        /**
+         * @brief destructor. clears up remaining nodes.
+         */
         ~flex_tree() noexcept
         { this->clear(); }
 
-        friend void 
-        swap(flex_tree& a, flex_tree& b) noexcept
-        { std::swap(a.impl_M_, b.impl_M_); }
-
+        /**
+         * @brief copy constructor.
+         */
         flex_tree(const flex_tree& other) noexcept
             : flex_tree(other.get_allocator())
         { 
+            this->clear();
             this->copy_children_M_(&this->impl_M_.header_M_, &other.impl_M_.header_M_);
         }
 
+        /**
+         * @brief move constructor.
+         */
         flex_tree(flex_tree&& other) noexcept
             : flex_tree()
         { swap(*this, other); }
 
-        // by-value for copy-swap-idiom
+        /**
+         * @brief copy assignment using copy-swap-idiom.
+         */
         flex_tree& 
         operator=(flex_tree other) noexcept
         { swap(*this, other); return *this; }
 
+        /**
+         * @brief move assignment.
+         */
         flex_tree& 
         operator=(flex_tree&& other) noexcept 
         { swap(*this, other); return *this; }
 
-        /*
-         * iteration
+        /**
+         * @brief std::swap specialization.
+         */
+        friend void 
+        swap(flex_tree& a, flex_tree& b) noexcept
+        { std::swap(a.impl_M_, b.impl_M_); }
+
+        /**
+         * @}
          */
 
         /**
-         * @brief provides iterators to traverse the tree.
+         * @name iteration
+         * @{
+         */
+
+        /**
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @returns iterator to the first valid node of the tree. returns end-iterator if tree is empty.
+         * @return an iterator to the first-child-node of the root, or end() if the tree is empty.
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
         begin() 
-        { return iterator<Traversal>(this->impl_M_.header_M_.has_children_M_() ? this->impl_M_.header_M_.first_child_M_ : &this->impl_M_.header_M_); }
+        { return iterator<Traversal>(this->size() ? this->impl_M_.header_M_.first_child_M_ : &this->impl_M_.header_M_); }
         
         /**
-         * @brief provides const-iterators to traverse the tree.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @returns const-iterator to the first valid node of the tree. returns end-iterator if tree is empty.
+         * @return a const-iterator to the first-child-node of the root, or end() if the tree is empty.
          */
         template <traversal Traversal = default_traversal>
         const_iterator<Traversal> 
         cbegin() const 
-        { return const_iterator<Traversal>(this->impl_M_.header_M_.has_children_M_() ? this->impl_M_.header_M_.first_child_M_ : &this->impl_M_.header_M_); }
+        { return const_iterator<Traversal>(this->size() ? this->impl_M_.header_M_.first_child_M_ : &this->impl_M_.header_M_); }
 
         /**
-         * @brief provides iterators to traverse the tree.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @returns iterator to the header-node of the tree marking the end-node.
+         * @return an iterator to the true root-node of the tree, acting as a valueless sentinel-node.
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
@@ -1151,9 +1013,8 @@ namespace trl
         { return iterator<Traversal>(&this->impl_M_.header_M_); }
 
         /**
-         * @brief provides const-iterators to traverse the tree.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @returns const-iterator to the header-node of the tree marking the end-node.
+         * @return a const-iterator to the true root-node of the tree, acting as a valueless sentinel-node.
          */
         template <traversal Traversal = default_traversal>
         const_iterator<Traversal> 
@@ -1161,9 +1022,8 @@ namespace trl
         { return const_iterator<Traversal>(&this->impl_M_.header_M_); }
 
         /**
-         * @brief provides iterators to traverse the tree.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @returns iterator to the first valid node of the tree. returns end-iterator if tree is empty.
+         * @return a reverse-iterator to the first-child-node of the root, or end() if the tree is empty.
          */
         template <traversal Traversal = default_traversal>
         reverse_iterator<Traversal> 
@@ -1171,9 +1031,8 @@ namespace trl
         { return reverse_iterator<Traversal>(this->begin<Traversal>()); }
         
         /**
-         * @brief provides const-iterators to traverse the tree.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @returns const-iterator to the first valid node of the tree. returns end-iterator if tree is empty.
+         * @return a const-reverse-iterator to the first-child-node of the root, or end() if the tree is empty.
          */
         template <traversal Traversal = default_traversal>
         const_reverse_iterator<Traversal> 
@@ -1181,9 +1040,8 @@ namespace trl
         { return const_reverse_iterator(this->cbegin<Traversal>()); }
 
         /**
-         * @brief provides iterators to traverse the tree.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @returns iterator to the header-node of the tree marking the end-node.
+         * @return a reverse-iterator to the true root-node of the tree, acting as a valueless sentinel-node.
          */
         template <traversal Traversal = default_traversal>
         reverse_iterator<Traversal> 
@@ -1191,198 +1049,207 @@ namespace trl
         { return reverse_iterator<Traversal>(this->end<Traversal>()); }
 
         /**
-         * @brief provides const-iterators to traverse the tree.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @returns const-iterator to the header-node of the tree marking the end-node.
+         * @returns a const-reverse-iterator to the true root-node of the tree, acting as a valueless sentinel-node.
          */
         template <traversal Traversal = default_traversal>
         const_reverse_iterator<Traversal> 
         crend() const 
         { return const_reverse_iterator<Traversal>(this->cend<Traversal>()); }
 
-        /*
-         * modifiers
+        /**
+         * @}
          */
 
-        /*
-         * single-node tree-construction operations
+        /** 
+         * @name single-node modifiers
+         * @{
          */
 
         /**
-         * @brief insert a new child-node at the front of a node's child-node-chain.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @brief insert a new child-node as `where`'s first-child.
+         * @param where an iterator to the new node's parent node.
          * @param value the value that the node will initially hold.
-         * @param where iterator to the new node's parent node.
-         * @returns iterator to the newly created node.
+         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @return an iterator to the newly created node.
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
         prepend(iterator<Traversal> where, const value_type& value)
         {
-            assert(where.ptr_M_);
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
-        #ifndef TRL_FLEX_TREE_NOEXCEPT
-            if (!where.ptr_M_) { throw std::invalid_argument("invalid iterator"); }
-        #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(value);
             new__->hook_as_first_child_M_(where); ++this->impl_M_.header_M_.size_M_;
             return { new__, &this->impl_M_.header_M_ };
         }
     
         /**
-         * @brief emplace a new child-node at the front of a node's child-node-chain.
+         * @brief emplace a new child-node as `where`'s first-child.
+         * @param where an iterator to the new node's parent node.
+         * @param args constructor arguments that are forwarded into the value of the new node.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @param args constructor arguments for the new-nodes value-type.
-         * @param where iterator to the new node's parent node.
-         * @returns iterator to the newly created node.
+         * @return an iterator to the newly created node.
          */
         template <traversal Traversal = default_traversal, typename... Args>
         iterator<Traversal> 
         emplace_prepend(iterator<Traversal> where, Args&&... args)
         {
-            assert(where.ptr_M_);
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(std::forward<Args>(args)...);
             new__->hook_as_first_child_M_(where); ++this->impl_M_.header_M_.size_M_;
             return { new__, &this->impl_M_.header_M_ };
         }
         
         /**
-         * @brief insert a new child-node at the back of a node's child-node-chain.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @brief insert a new child-node as `where`'s last-child.
+         * @param where an iterator to the new node's parent node.
          * @param value the value that the node will initially hold.
-         * @param where iterator to the new node's parent node.
-         * @returns iterator to the newly created node.
+         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @return an iterator to the newly created node.
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
         append(iterator<Traversal> where, const value_type& value)
         {
-            assert(where.ptr_M_);
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(value); 
             new__->hook_as_last_child_M_(where); ++this->impl_M_.header_M_.size_M_;
             return { new__, &this->impl_M_.header_M_ };
         }
 
         /**
-         * @brief emplaces a new child-node at the back of a node's child-node-chain.
+         * @brief emplace a new child-node as `where`'s last-child.
+         * @param where an iterator to the new node's parent node.
+         * @param args constructor arguments that are forwarded into the value of the new node.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @param args constructor arguments for the new-nodes value-type.
-         * @param where iterator to the new node's parent node.
-         * @returns iterator to the newly created node.
+         * @return an iterator to the newly created node.
          */
         template <traversal Traversal = default_traversal, typename... Args>
         iterator<Traversal> 
         emplace_append(iterator<Traversal> where, Args&&... args)
         {
-            assert(where.ptr_M_);
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(std::forward<Args>(args)...);
             new__->hook_as_last_child_M_(where); ++this->impl_M_.header_M_.size_M_;
             return { new__, &this->impl_M_.header_M_ };
         }
 
         /**
-         * @brief insert a new node as the next sibling of the another node.
-         * @details passing an end()-iterator will be undefined behaviour as the root-node cannot have any siblings.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @brief insert a new node as the next sibling of `where`.
+         * @param where an iterator to the new node's previous sibling.
          * @param value the value that the node will initially hold.
-         * @param where iterator to the new node's previous sibling.
-         * @returns iterator to the newly created node.
+         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @return an iterator to the newly created node.
+         * @note exceptions are thrown / behaviour is undefined if:
+         * - `where` is an `end()`-iterator.
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
         insert_after(iterator<Traversal> where, const value_type& value)
         {
-            assert(where.ptr_M_);
-            assert(!where.ptr_M_->is_root_M_());
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
+        #else
+            assert(!where.node_ptr_M_()->is_root_M_());
+        #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(value);
             new__->hook_as_next_sibling_M_(where); ++this->impl_M_.header_M_.size_M_;
             return { new__, &this->impl_M_.header_M_ };
         }
             
         /**
-         * @brief insert a new node as the next sibling of the another node.
-         * @details passing an end()-iterator will be undefined behaviour as the root-node cannot have any siblings.
+         * @brief emplace a new node as the next sibling of `where`.
+         * @param where an iterator to the new node's previous sibling.
+         * @param args constructor arguments that are forwarded into the value of the new node.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @param args constructor arguments for the new-nodes value-type.
-         * @param where iterator to the new node's previous sibling.
-         * @returns iterator to the newly created node.
+         * @return an iterator to the newly created node.
+         * @note exceptions are thrown / behaviour is undefined if:
+         * - `where` is an `end()`-iterator.
          */
         template <traversal Traversal = default_traversal, typename... Args>
         iterator<Traversal> 
         emplace_after(iterator<Traversal> where, Args&&... args)
         {
-            assert(where.ptr_M_);
-            assert(!where.ptr_M_->is_root_M_());
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
+        #else
+            assert(!where.node_ptr_M_()->is_root_M_());
+        #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(std::forward<Args>(args)...);
             new__->hook_as_next_sibling_M_(where); ++this->impl_M_.header_M_.size_M_;
             return { new__, &this->impl_M_.header_M_ };
         }
 
         /**
-         * @brief insert a new node as the previous sibling of the another node.
-         * @details passing an end()-iterator will be undefined behaviour as the root-node cannot have any siblings.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @brief insert a new node as the previous sibling of `where`.
+         * @param where an iterator to the new node's next sibling.
          * @param value the value that the node will initially hold.
-         * @param where iterator to the new node's next sibling.
-         * @returns iterator to the newly created node.
+         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @return an iterator to the newly created node.
+         * @note exceptions are thrown / behaviour is undefined if:
+         * - `where` is an `end()`-iterator.
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
         insert_before(iterator<Traversal> where, const value_type& value)
         {
-            assert(where.ptr_M_);
-            assert(!where.ptr_M_->is_root_M_());
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
+        #else
+            assert(!where.node_ptr_M_()->is_root_M_());
+        #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(value);
             new__->hook_as_prev_sibling_M_(where); ++this->impl_M_.header_M_.size_M_;
             return { new__, &this->impl_M_.header_M_ };
         }
     
         /**
-         * @brief insert a new node as the previous sibling of the another node.
-         * @details passing an end()-iterator will be undefined behaviour as the root-node cannot have any siblings.
+         * @brief emplace a new node as the previous sibling of `where`.
+         * @param where an iterator to the new node's next sibling.
+         * @param args constructor arguments that are forwarded into the value of the new node.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @param args constructor arguments for the new-nodes value-type.
-         * @param where iterator to the new node's next sibling.
-         * @returns iterator to the newly created node.
+         * @return an iterator to the newly created node.
+         * @note exceptions are thrown / behaviour is undefined if:
+         * - `where` is an `end()`-iterator.
          */
         template <traversal Traversal = default_traversal, typename... Args>
         iterator<Traversal> 
         emplace_before(iterator<Traversal> where, Args&&... args)
         {
-            assert(where.ptr_M_);
-            assert(!where.ptr_M_->is_root_M_());
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
+        #else
+            assert(!where.node_ptr_M_()->is_root_M_());
+        #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(std::forward<Args>(args)...); 
             new__->_hook_as_prev_sibling(where); ++this->impl_M_.header_M_.size_M_;
             return { new__, &this->impl_M_.header_M_ };
         }
         
-        /*
-         * concatenation-operations - merging tree-sections
+        /**
+         * @}
          */
 
         /**
-         * @brief inserts an entire section of a tree with all of it's child-nodes at a given position by copying.
-         * @details passing an end()-iterator to parameter 'src' will be undefined behaviour as the root-node does not hold a value.
+         * @name concatenation modifiers
+         * copying tree-sections from one place to another.
+         * @{
+         */
+
+        /**
+         * @brief inserts an entire section of a tree with all of it's descendants at a given position by copying.
+         * @param where an iterator to the node where the to-be-inserted tree should follow as the last-child.
+         * @param src an iterator to the source-node that should be copied with all it's descendants. can be the same iterator as `where`.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @param where iterator to the node where the to-be-inserted tree should follow as the last child.
-         * @param src iterator to the source-node that should be copied. can be in the same tree as 'where'.
-         * @returns iterator to the newly created node.
+         * @return an iterator to the newly created node.
+         * @note exceptions are thrown / behaviour is undefined if:
+         * - `src` is an `end()`-iterator.
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
         concatenate_append(iterator<Traversal> where, iterator<Traversal> src)
         {
-            assert(where.ptr_M_);
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
-            assert(src.ptr_M_);
-            assert(!src.ptr_M_->is_root_M_());
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
+        #else
+            assert(!src.node_ptr_M_()->is_root_M_());
+        #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(*src);
             this->copy_children_M_(new__, src);
             new__->hook_as_last_child_M_(where);
@@ -1390,21 +1257,23 @@ namespace trl
         }
 
         /**
-         * @brief inserts an entire section of a tree with all of it's child-nodes at a given position by copying.
-         * @details passing an end()-iterator to parameter 'src' will be undefined behaviour as the root-node does not hold a value.
+         * @brief inserts an entire section of a tree with all of it's descendants at a given position by copying.
+         * @param where an iterator to the node where the to-be-inserted tree should follow as the first-child.
+         * @param src an iterator to the source-node that should be copied with all it's descendants. can be the same iterator as `where`.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @param where iterator to the node where the to-be-inserted tree should follow as the first child.
-         * @param src iterator to the source-node that should be copied. can be in the same tree as 'where'.
-         * @returns iterator to the newly created node.
+         * @return an iterator to the newly created node.
+         * @note exceptions are thrown / behaviour is undefined if:
+         * - `src` is an `end()`-iterator.
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
         concatenate_prepend(iterator<Traversal> where, iterator<Traversal> src)
         {
-            assert(where.ptr_M_);
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
-            assert(src.ptr_M_);
-            assert(!src.ptr_M_->is_root_M_());
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
+        #else
+            assert(!src.node_ptr_M_()->is_root_M_());
+        #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(*src);
             this->copy_children_M_(new__, src);
             new__->hook_as_first_child_M_(where);
@@ -1412,24 +1281,25 @@ namespace trl
         }
 
         /**
-         * @brief inserts an entire section of a tree with all of it's child-nodes at a given position by copying.
-         * @details 
-         * passing an end()-iterator to parameter 'where' will be undefined behaviour as the root-node cannot have any siblings.
-         * passing an end()-iterator to parameter 'src' will be undefined behaviour as the root-node does not hold a value.
+         * @brief inserts an entire section of a tree with all of it's descendants at a given position by copying.
+         * @param where an iterator to the node where the to-be-inserted tree should follow as the next sibling.
+         * @param src an iterator to the source-node that should be copied with all it's descendants. can be the same iterator as `where`.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @param where iterator to the node where the to-be-inserted tree should follow as the next sibling.
-         * @param src iterator to the source-node that should be copied. can be in the same tree as 'where'.
-         * @returns iterator to the newly created node.
+         * @return an iterator to the newly created node.
+         * @note exceptions are thrown / behaviour is undefined if:
+         * - `where` or `src` is an `end()`-iterator.
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
         concatenate_after(iterator<Traversal> where, iterator<Traversal> src)
         {
-            assert(where.ptr_M_);
-            assert(!where.ptr_M_->is_root_M_());
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
-            assert(src.ptr_M_);
-            assert(!src.ptr_M_->is_root_M_());
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
+            if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
+        #else
+            assert(!where.node_ptr_M_()->is_root_M_());
+            assert(!src.node_ptr_M_()->is_root_M_());
+        #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(*src);
             this->copy_children_M_(new__, src);
             new__->hook_as_next_sibling_M_(where);
@@ -1437,107 +1307,170 @@ namespace trl
         }
 
         /**
-         * @brief inserts an entire section of a tree with all of it's child-nodes at a given position by copying.
-         * @details 
-         * passing an end()-iterator to parameter 'where' will be undefined behaviour as the root-node cannot have any siblings.
-         * passing an end()-iterator to parameter 'src' will be undefined behaviour as the root-node does not hold a value.
+         * @brief inserts an entire section of a tree with all of it's descendants at a given position by copying.
+         * @param where an iterator to the node where the to-be-inserted tree should follow as the previous sibling.
+         * @param src an iterator to the source-node that should be copied with all it's descendants. can be the same iterator as `where`.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @param where iterator to the node where the to-be-inserted tree should follow as the previous sibling.
-         * @param src iterator to the source-node that should be copied. can be in the same tree as 'where'.
-         * @returns iterator to the newly created node.
+         * @return an iterator to the newly created node.
+         * @note exceptions are thrown / behaviour is undefined if:
+         * - `where` or `src` is an `end()`-iterator.
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
         concatenate_before(iterator<Traversal> where, iterator<Traversal> src)
         {
-            assert(where.ptr_M_);
-            assert(!where.ptr_M_->is_root_M_());
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
-            assert(src.ptr_M_);
-            assert(!src.ptr_M_->is_root_M_());
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
+            if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
+        #else
+            assert(!where.node_ptr_M_()->is_root_M_());
+            assert(!src.node_ptr_M_()->is_root_M_());
+        #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(*src);
             this->copy_children_M_(new__, src);
             new__->hook_as_prev_sibling_M_(where);
             return new__;
         }
 
-        /*
-         * splicing-operations - concatenating by moving nodes from one tree to another
+        /**
+         * @}
          */
 
+        /**
+         * @name splicing-operations 
+         *
+         * concatenating trees by moving nodes from one place to another.
+         * @{
+         */
+
+        /**
+         * @brief moves nodes from `src` behind the last-child of `where`, or insert's it as `where`'s first-child, if there are none.
+         * @param where the node that should have `src` as it's last-child. 
+         * @param src the node to be put behind `where`'s last-child, with all of it's descendants.
+         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @note exceptions are thrown / the behaviour is undefined if:
+         * - `src` is an `end()`-iterator.
+         * - `where` and `src` point to the same node.
+         */
         template <traversal Traversal = default_traversal>
-        iterator<Traversal>
+        void
         splice_append(iterator<Traversal> where, iterator<Traversal> src)
         {
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
+            if (where == src) { throw std::invalid_argument("cannot splice to the same node"); }
+        #else
+            assert(!src.node_ptr_M_()->is_root_M_())
+            assert(where != src);
+        #endif
             src.ptr_M_->unhook_M_();
             src.ptr_M_->hook_as_last_child_M_(where);
-            return src;
         }
 
+        /**
+         * @brief moves nodes from `src` in front of the first-child of `where`, or insert's it as `where`'s first-child, if there are none.
+         * @param where the node that should have `src` as it's first-child.
+         * @param src the node to be put before `where`'s first-child, with all of it's descendants.
+         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @note exceptions are thrown / the behaviour is undefined if:
+         * - `src` is an `end()`-iterator.
+         * - `where` and `src` point to the same node.
+         */
         template <traversal Traversal = default_traversal>
-        iterator<Traversal>
+        void
         splice_prepend(iterator<Traversal> where, iterator<Traversal> src)
         {
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
+            if (where == src) { throw std::invalid_argument("cannot splice to the same node"); }
+        #else
+            assert(!src.node_ptr_M_()->is_root_M_())
+            assert(where != src);
+        #endif
             src.ptr_M_->unhook_M_();
             src.ptr_M_->hook_as_first_child_M_(where);
-            return src;
         }
 
+        /**
+         * @brief moves nodes from `src` behind `where`.
+         * @param where the node that `src` should go after.
+         * @param src the node to be put behind `where`, with all of it's descendants.
+         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @note exceptions are thrown / the behaviour is undefined if:
+         * - `where` or `src` is an `end()`-iterator.
+         * - `where` and `src` point to the same node.
+         */
         template <traversal Traversal = default_traversal>
-        iterator<Traversal>
+        void
         splice_after(iterator<Traversal> where, iterator<Traversal> src)
         {
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
+            if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
+            if (where == src) { throw std::invalid_argument("cannot splice to the same node"); }
+        #else
+            assert(!where.node_ptr_M_()->is_root_M_() && !src.node_ptr_M_()->is_root_M_());
+            assert(where != src);
+        #endif
             src.ptr_M_->unhook_M_();
             src.ptr_M_->hook_as_next_sibling_M_(where);
-            return src;
         }
 
+        /**
+         * @brief moves nodes from `src` in front of `where`.
+         * @param where the node that `src` should go before.
+         * @param src the node to be put before `where`, with all of it's descendants.
+         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @note exceptions are thrown / the behaviour is undefined if:
+         * - `where` or `src` is an `end()`-iterator.
+         * - `where` and `src` point to the same node.
+         */
         template <traversal Traversal = default_traversal>
-        iterator<Traversal>
+        void
         splice_before(iterator<Traversal> where, iterator<Traversal> src)
         {
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
+            if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
+            if (where == src) { throw std::invalid_argument("cannot splice to the same node"); }
+        #else
+            assert(!where.node_ptr_M_()->is_root_M_() && !src.node_ptr_M_()->is_root_M_());
+            assert(where != src);
+        #endif
             src.ptr_M_->unhook_M_();
             src.ptr_M_->hook_as_prev_sibling_M_(where);
-            return src;
         }
-
-        /*
-         * subtree-creation
+        
+        /**
+         * @}
          */
 
         /**
-         * @brief creates a copy of a tree at a given node-position.
-         */
-        template <traversal Traversal = default_traversal>
-        flex_tree subtree(iterator<Traversal> where)
-        {
-            flex_tree res;
-            res.copy_children_M_(&res.impl_M_.header_M_, where.ptr_M_);
-            return res;
-        }
-
-        /*
-         * node-erasure
+         * @name erasure modifiers
+         * @{
          */
 
         /**
-         * @brief erases a node from the tree.
-         * @details passing an end()-iterator will be undefined behaviour as the root-node cannot be erased. use .clear() instead.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @brief erases a node and all of it's descendants from the tree.
          * @param where the node to be erased.
-         * @returns iterator to the next valid node in the tree.
+         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @return an iterator to the next valid node in the tree.
+         * @note exceptions are thrown / the behaviour is undefined if:
+         * - `where` is an `end()`-iterator.
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
         erase(iterator<Traversal> where)
         {
-            assert(where.ptr_M_);
-            assert(!where.ptr_M_->is_root_M_());
-            assert(where.header_ptr_M_ == &this->impl_M_.header_M_);
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
+        #else
+            assert(!where.node_ptr_M_()->is_root_M_());
+        #endif
             this->impl_M_.header_M_.size_M_ -= this->erase_children_M_(where);
             iterator<Traversal> next__ = std::next(where);
-            where.ptr_M_->unhook_M_();
-            this->impl_M_.put_node_M_(static_cast<node_ptr_T_>(where.ptr_M_));
+            where.node_ptr_M_()->unhook_M_();
+            this->impl_M_.put_node_M_(static_cast<node_ptr_T_>(where.node_ptr_M_()));
             return next__;
         }
         
@@ -1548,14 +1481,19 @@ namespace trl
         clear()
         { this->impl_M_.header_M_.size_M_ -= this->erase_children_M_(&this->impl_M_.header_M_); }
 
-        /*
-         * information
+        /**
+         * @}
          */
 
         /**
-         * @brief determines the depth of the deepest node in the tree via full iteration.
+         * @name container-information
+         * @{
+         */
+
+        /**
+         * @brief determines the depth of the deepest node in the tree via a full iteration.
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
-         * @returns the depth of the deepest node in the tree.
+         * @return the depth of the deepest node in the tree.
          */
         template <traversal Traversal = default_traversal>
         std::size_t 
@@ -1569,18 +1507,29 @@ namespace trl
 
         /**
          * @brief get the associated allocator object.
-         * @return allocator_type 
+         * @return instance of `allocator_type` 
          */
-        allocator_type 
-        get_allocator() const 
+        constexpr allocator_type 
+        get_allocator() const noexcept
         { return this->impl_M_.get_alloc_M_(); }
 
         /**
-         * @return total node-count of the tree.
+         * @return the total node-count of the tree.
          */
-        std::size_t 
-        size() const 
+        constexpr std::size_t 
+        size() const noexcept
         { return this->impl_M_.header_M_.size_M_; }
+
+        /**
+         * @return true if the tree is empty.
+         */
+        constexpr bool
+        empty() const noexcept
+        { return !this->impl_M_.header_M_.size_M_; }
+
+        /**
+         * @}
+         */
 
     };
 
