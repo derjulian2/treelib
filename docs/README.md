@@ -68,7 +68,8 @@ __erasing__ nodes / __clearing__ trees:
 # Examples
 
 > [!NOTE]
-> the flex_tree container is built similiarly to a standard-library container. compile-time errors such as passing an iterator from one tree > into another or dereferencing a past-the-end-iterator are not caught or handled (or only via asserts if the macro NDEBUG is not defined) 
+> the flex_tree container is built similiarly to a standard-library container. compile-time errors such as passing an iterator from one tree 
+> into another or dereferencing a past-the-end-iterator are not caught or handled (or only via asserts if the macro NDEBUG is not defined) 
 > and must be prevented by the user.
 
 # Data-Structure Design
@@ -90,6 +91,7 @@ mostly as an exercise, there will be a python-binding for this data-structure cr
 
 - `trl::n_ary_tree` class-template: optimized tree for holding exactly `n` child-nodes.
 - `trl::flat_flex_tree` class-template: similiar to `trl::flex_tree` but should keep it's nodes in a contiguous sequence for fastest iteration (but slower modifications).
+- provide `treelib-config.cmake` for `find_package(treelib)` cmake-syntax (although, this is a header-only library).
 
 # Inspiration and Credits
 

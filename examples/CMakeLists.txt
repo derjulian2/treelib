@@ -1,8 +1,4 @@
-cmake_minimum_required(VERSION 4.0.0)
-
-set(CMAKE_CXX_STANDARD 23)
-
-project(treelib_debug)
+message("building examples")
 
 add_executable(treelib_debug 
         main.cpp 

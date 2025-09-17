@@ -10,45 +10,28 @@ int trl::tests::flex_tree_test()
     using namespace trl;
 
     
-    flex_tree<std::string> str_tree_1 =
+    flex_tree<std::string> str_tree_1
     {
-        "node_1",
-        "node_2",
-    {   "node_3", // braces here required for the compiler to know where a node with child-nodes starts
-        { 
-        {   "node_4",
-            {
-                "node_5",
-                "node_6"
-            }
-        },  "node_7"
-        }
-    } // braces here required
+        "first_node"
     };
 
-    auto beg = str_tree_1.begin();
-    auto beg2 = str_tree_1.begin<breadth_first_in_order>();
-    auto rbeg = str_tree_1.rbegin();
-    auto cbeg = str_tree_1.cbegin();
-    //auto crbeg = str_tree_1.crbegin();
+    std::size_t reps{7ull};
 
-    auto end = str_tree_1.end();
-    auto cend = str_tree_1.cend();
-    auto rend = str_tree_1.rend();
-    //auto crend = str_tree_1.crend();
+    for (std::size_t i = 0ull; i < reps; ++i)
+    {
+        /* double the tree in size each time by prepending a new node in front of every node */
+        for (flex_tree<std::string>::iterator it = str_tree_1.begin(); it != str_tree_1.end();)
+        {
+            it = str_tree_1.prepend(it, std::to_string(i));
+            ++it;
+        }
+    }
 
-    beg2 = beg;
-    cbeg = beg;
-    bool b = (beg == beg2);
-
-    /* conversions possible */
-    trl::node_traits::parent(beg);
-    trl::flex_tree<std::string>::reverse_iterator<breadth_first_in_order> r = trl::node_traits::parent(rbeg);
-
-    static_assert(std::input_iterator<flex_tree<std::string>::iterator<>>);
-    static_assert(std::input_iterator<flex_tree<std::string>::const_iterator<>>);
-    static_assert(std::input_iterator<flex_tree<std::string>::reverse_iterator<>>);
-    static_assert(std::input_iterator<flex_tree<std::string>::const_reverse_iterator<>>);
+    for (flex_tree<std::string>::iterator it = str_tree_1.begin(); it != str_tree_1.end(); ++it)
+    {
+        std::cout << std::string(node_traits::depth(it), '-') << *it << "\n";
+    }
+    std::cout << "tree size of " << str_tree_1.size() << "\n";
 
     // for (flex_tree<std::string>::const_iterator<> i = str_tree_1.cbegin<>(); i != str_tree_1.cend<>(); ++i)
     // {

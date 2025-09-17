@@ -30,11 +30,10 @@
  * - 'variable_M_' or 'method_M_()' describes private member variables or methods used internally by the implementation.
  *
  * TODO:
- * - clean up: find right spots for assertions, review hook() unhook() code and unit-test, benchmark, document.
- * - enforce naming-schemes, decl-order and what not
+ * - clean up: review hook() unhook() code and unit-test, benchmark, document.
  * - friend relations with iterator
  * - traversal algorithms
- * - add compile-option TRL_FLEX_TREE_NOEXCEPT and exceptions for assert-handling
+ * - NO_RECURSION algorithms
  */
 /********************************/
 #include <concepts>
@@ -45,6 +44,18 @@
 #include <type_traits>
 #include <stdexcept>
 #include <cassert>
+/********************************/
+#ifndef TRL_FLEX_TREE_NOEXCEPT
+    #define TRL_NOEXCEPT
+#else
+    #define TRL_NOEXCEPT noexcept
+#endif
+/********************************/
+#if !defined(TRL_FLEX_TREE_ITER_NOEXCEPT) && !defined (TRL_FLEX_TREE_NOEXCEPT)
+    #define TRL_ITER_NOEXCEPT
+#else
+    #define TRL_ITER_NOEXCEPT noexcept
+#endif
 /********************************/
 namespace trl
 {
@@ -70,11 +81,16 @@ namespace trl
              * @{
              */
 
-            base_pointer_T_ parent_M_{nullptr};
-            base_pointer_T_ first_child_M_{nullptr};
-            base_pointer_T_ last_child_M_{nullptr};
-            base_pointer_T_ next_M_{nullptr};
-            base_pointer_T_ prev_M_{nullptr};
+            /* 
+             * cyclic pointers to 'this', so they are always 'valid'.
+             * less intuitive, but allows for some cleaner operations later on
+             * (e.g. header->first_child should always be the .begin() node).
+             */
+            base_pointer_T_ parent_M_{this};
+            base_pointer_T_ first_child_M_{this};
+            base_pointer_T_ last_child_M_{this};
+            base_pointer_T_ next_M_{this};
+            base_pointer_T_ prev_M_{this};
 
             std::size_t child_count_M_{0ull};
         #ifdef TRL_FLEX_TREE_FAST_DEPTH
@@ -89,7 +105,7 @@ namespace trl
             find_root_M_()
             {
                 base_pointer_T_ res__{this};
-                while (res__->parent_M_)
+                while (!res__->is_root_M_())
                 { res__ = res__->parent_M_; }
                 return res__;
             }
@@ -98,7 +114,7 @@ namespace trl
             find_root_M_() const
             { 
                 c_base_pointer_T_ res__{this};
-                while (res__->parent_M_)
+                while (!res__->is_root_M_())
                 { res__ = res__->parent_M_; }
                 return res__;
             }
@@ -109,9 +125,10 @@ namespace trl
             #ifdef TRL_FLEX_TREE_FAST_DEPTH
                 return this->depth_M_;
             #else
-                base_pointer_T_ iter__ = this->parent_M_;
+                c_base_pointer_T_ iter__{this};
                 std::size_t res__{0ull};
-                while (iter__->parent_M_) { iter__ = iter__->parent_M_; ++res__; }
+                while (!iter__->is_root_M_()) 
+                { iter__ = iter__->parent_M_; ++res__; }
                 return res__;
             #endif
             }
@@ -126,27 +143,27 @@ namespace trl
 
             bool 
             is_root_M_() const 
-            { return !this->parent_M_; }
+            { return this->parent_M_ == this; }
 
             bool 
             is_first_child_M_() const
-            { return this->has_prev_M_() ? this->prev_M_->parent_M_ != this->parent_M_ : true; }
+            { return !this->has_prev_M_() || this->prev_M_->parent_M_ != this->parent_M_; }
             
             bool 
             is_last_child_M_() const
-            { return this->has_next_M_() ? this->next_M_->parent_M_ != this->parent_M_ : true; }
+            { return !this->has_next_M_() || this->next_M_->parent_M_ != this->parent_M_; }
             
             bool 
             has_next_M_() const
-            { return this->next_M_;  }
+            { return this->next_M_ != this;  }
 
             bool 
             has_prev_M_() const
-            { return this->prev_M_; }
+            { return this->prev_M_ != this; }
 
             bool 
             has_children_M_() const
-            { return this->first_child_M_; }
+            { return this->first_child_M_ != this; }
 
             bool 
             is_only_child_M_() const 
@@ -191,9 +208,12 @@ namespace trl
             void 
             update_discard_notify_neighbours_M_()
             {
-                if (this->has_next_M_() && this->has_prev_M_()) { this->prev_M_->entangle_M_(this->next_M_); }
-                else if (this->has_prev_M_()) { this->prev_M_->next_M_ = nullptr; }
-                else if (this->has_next_M_()) { this->next_M_->prev_M_ = nullptr; }
+                if (this->has_next_M_() && this->has_prev_M_()) 
+                { this->prev_M_->entangle_M_(this->next_M_); }
+                else if (this->has_prev_M_()) 
+                { this->prev_M_->next_M_ = this->prev_M_; }
+                else if (this->has_next_M_()) 
+                { this->next_M_->prev_M_ = this->next_M_; }
             }
 
             void 
@@ -213,7 +233,7 @@ namespace trl
             void 
             update_discard_only_child_M_()
             {
-                this->parent_M_->first_child_M_ = this->parent_M_->last_child_M_ = nullptr;
+                this->parent_M_->first_child_M_ = this->parent_M_->last_child_M_ = this->parent_M_;
                 --this->parent_M_->child_count_M_;
             }
 
@@ -242,32 +262,27 @@ namespace trl
             void 
             hook_as_first_child_M_(base_pointer_T_ parent__) 
             {
-                if (parent__->first_child_M_)
+                if (parent__->has_children_M_())
                 { 
                     if (parent__->first_child_M_->has_prev_M_())
                     { parent__->first_child_M_->prev_M_->entangle_M_(this); }
-                    this->entangle_M_(parent__->first_child_M_); 
+                    this->entangle_M_(parent__->first_child_M_);
+                    this->update_new_first_child_M_(parent__); 
                 }
-
-                
-                if (parent__->has_children_M_())
-                { this->update_new_first_child_M_(parent__); }
                 else
                 { this->update_new_only_child_M_(parent__); }
             }
 
             void 
             hook_as_last_child_M_(base_pointer_T_ parent__)
-            {
-                if (parent__->last_child_M_)
-                {   
+            {  
+                if (parent__->has_children_M_())
+                { 
                     if (parent__->last_child_M_->has_next_M_())
                     { this->entangle_M_(parent__->last_child_M_->next_M_); }
                     parent__->last_child_M_->entangle_M_(this); 
+                    this->update_new_last_child_M_(parent__); 
                 }
-                
-                if (parent__->has_children_M_())
-                { this->update_new_last_child_M_(parent__); }
                 else
                 { this->update_new_only_child_M_(parent__); }
             }
@@ -388,8 +403,8 @@ namespace trl
             {
                 if (iter__->has_children_M_()) 
                 { return iter__->first_child_M_; }
-                while (iter__->is_last_child_M_()) 
-                { iter__ = iter__->parent_M_; if (iter__->is_root_M_()) { return iter__; } }
+                while (iter__->is_last_child_M_() && !iter__->is_root_M_()) 
+                { iter__ = iter__->parent_M_; }
                 return iter__->next_M_;
             }
 
@@ -397,8 +412,8 @@ namespace trl
             {
                 if (iter__->has_children_M_()) 
                 { return iter__->first_child_M_; }
-                while (iter__->is_last_child_M_()) 
-                { iter__ = iter__->parent_M_; if (iter__->is_root_M_()) { return iter__; } }
+                while (iter__->is_last_child_M_() && !iter__->is_root_M_()) 
+                { iter__ = iter__->parent_M_;  }
                 return iter__->next_M_;
             }
 
@@ -599,7 +614,7 @@ namespace trl
             using pointer = value_type*;
             using reference = value_type&;
             
-            using node_ptr_T_ = std::conditional<Const__, const flex_tree_node__<ValTp__>*, flex_tree_node__<ValTp__>>::type;
+            using node_ptr_T_ = std::conditional<Const__, const flex_tree_node__<ValTp__>*, flex_tree_node__<ValTp__>*>::type;
             using base_ptr_T_ = std::conditional<Const__, const flex_tree_node_base__*, flex_tree_node_base__*>::type;
 
             using self_T_ = flex_tree_iterator__;
@@ -614,13 +629,13 @@ namespace trl
             /* const-iterator construction from non-const-iterator */
             template <traversal OTrav__>
                 requires Const__
-            flex_tree_iterator__(const flex_tree_iterator__<OTrav__, ValTp__, false>& other) noexcept
+            explicit flex_tree_iterator__(const flex_tree_iterator__<OTrav__, ValTp__, false>& other) noexcept
                 : ptr_M_(other.ptr_M_)
             { }
 
             /* iterator conversions between algorithms */
             template <traversal OTrav__>
-            flex_tree_iterator__(const flex_tree_iterator__<OTrav__, ValTp__, Const__>& other) noexcept
+            explicit flex_tree_iterator__(const flex_tree_iterator__<OTrav__, ValTp__, Const__>& other) noexcept
                 : ptr_M_(other.ptr_M_)
             { }
             
@@ -633,16 +648,11 @@ namespace trl
 
             [[nodiscard]]
             reference 
-            operator*() const
-        #if !defined(TRL_FLEX_TREE_NOEXCEPT) && !defined(TRL_FLEX_TREE_ITER_NOEXCEPT)
-            noexcept
-        #endif
-            { 
+            operator*() const TRL_ITER_NOEXCEPT
+            {
             #if !defined(TRL_FLEX_TREE_NOEXCEPT) && !defined(TRL_FLEX_TREE_ITER_NOEXCEPT)
-                if (!this->ptr_M_) { throw std::logic_error("invalid iterator"); }
                 if (this->ptr_M_->is_root_M_()) { throw std::logic_error("cannot dereference end()-iterator"); }
             #else
-                assert(this->ptr_M_);
                 assert(!this->ptr_M_->is_root_M_()); /* downcast will cause UB on end()-node. check only in debug. */
             #endif
                 return static_cast<node_ptr_T_>(this->ptr_M_)->value_M_; 
@@ -650,16 +660,11 @@ namespace trl
             
             [[nodiscard]]
             pointer 
-            operator->() const 
-        #if !defined(TRL_FLEX_TREE_NOEXCEPT) && !defined(TRL_FLEX_TREE_ITER_NOEXCEPT)
-            noexcept
-        #endif
+            operator->() const TRL_ITER_NOEXCEPT
             { 
             #if !defined(TRL_FLEX_TREE_NOEXCEPT) && !defined(TRL_FLEX_TREE_ITER_NOEXCEPT)
-                if (!this->ptr_M_) { throw std::logic_error("invalid iterator"); }
                 if (this->ptr_M_->is_root_M_()) { throw std::logic_error("cannot dereference end()-iterator"); }
             #else
-                assert(this->ptr_M_);
                 assert(!this->ptr_M_->is_root_M_()); /* downcast will cause UB on end()-node. check only in debug. */
             #endif
                 return std::addressof(static_cast<node_ptr_T_>(this->ptr_M_)->value_M_); 
@@ -751,12 +756,15 @@ namespace trl
 
             /**
              * OK to be called on any value-node or on the header as the header will never be a child-node of any other node.
+             * expects node__ to definitely have child-nodes.
              */        
             std::size_t
             copy_children_M_(base_ptr_T_ new_parent__, c_base_ptr_T_ node__)
             {
-                c_base_ptr_T_ iter__{node__->first_child_M_};
-                std::size_t nodes_affected__{1ull};
+                assert(node__->has_children_M_());
+
+                c_base_ptr_T_ iter__{node__->first_child_M_}; /* possibly iter__ == node__*/
+                std::size_t nodes_affected__{0ull};
 
             #ifdef TRL_FLEX_TREE_NO_RECURSION
                 _node* _copy_iter{_this_copy};
@@ -772,15 +780,19 @@ namespace trl
                     if (!_iter->_is_root()) { _iter = _iter->_M_next; _copy_iter = _copy_iter->_M_next; }
                 }
             #else
-                while (iter__)
+                while (true)
                 {
                     node_ptr_T_ copy__ = this->impl_M_.get_node_M_(static_cast<c_node_ptr_T_>(iter__)->value_M_);
                     copy__->hook_as_last_child_M_(new_parent__);
 
-                    if (iter__->has_children_M_()) 
+                    if (iter__->has_children_M_())
                     { nodes_affected__ += copy_children_M_(copy__, iter__); }
 
                     ++nodes_affected__;
+
+                    if (!iter__->has_next_M_())
+                    { break; }
+
                     iter__ = iter__->next_M_;
                 }
             #endif
@@ -789,10 +801,13 @@ namespace trl
 
             /**
              * OK to be called on any value-node or on the header as the header will never be a child-node of any other node.
+             * expects node__ to definitely have child-nodes.
              */
             std::size_t 
             erase_children_M_(base_ptr_T_ node__)
             {
+                assert(node__->has_children_M_());
+
                 base_ptr_T_ iter__{node__->first_child_M_};
                 std::size_t nodes_affected__{0ull};
 
@@ -806,13 +821,19 @@ namespace trl
                     _iter = _iter_next;
                 }
             #else
-                while (iter__)
-                {
-                    if (iter__->has_children_M_()) { nodes_affected__ += erase_children_M_(iter__); }
+                while (true)
+                { 
+                    if (iter__->has_children_M_())
+                    { nodes_affected__ += erase_children_M_(iter__); }
+
                     base_ptr_T_ iter_next__{iter__->next_M_}; // save next node before deletion
                     iter__->unhook_M_(); // delete after jumping down
                     this->impl_M_.put_node_M_(static_cast<node_ptr_T_>(iter__)); /* static_cast should not fail as it is never called on root */
                     ++nodes_affected__;
+
+                    if (!iter__->has_next_M_())
+                    { break; }
+
                     iter__ = iter_next__;
                 }
             #endif
@@ -843,7 +864,7 @@ namespace trl
         using value_type = Type;
         using allocator_type = Allocator;
         using initializer_type = detail__::flex_tree_node_initializer__<Allocator>;
-
+        
 
         template <traversal Traversal = default_traversal>
         using iterator = detail__::flex_tree_iterator__<Traversal, value_type, false>;
@@ -883,7 +904,7 @@ namespace trl
          */
         flex_tree(std::initializer_list<node_initializer_T_> ilist, const allocator_type& allocator = allocator_type()) noexcept
             : flex_tree(allocator)
-        { 
+        {
             this->impl_M_.header_M_.from_initializer_list_M_(ilist);
         #ifdef TRL_FLEX_TREE_FAST_DEPTH
             this->_M_impl._M_header.update_depth_M_();
@@ -911,7 +932,7 @@ namespace trl
          * - `where` is an `end()`-iterator.
          */
         template <traversal Traversal>
-        explicit flex_tree(const_iterator<Traversal> where, const allocator_type& allocator = allocator_type())
+        explicit flex_tree(const_iterator<Traversal> where, const allocator_type& allocator = allocator_type()) TRL_NOEXCEPT
             : flex_tree(allocator)
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
@@ -919,7 +940,31 @@ namespace trl
         #else
             assert(!where.node_ptr_M_()->is_root_M_());
         #endif
-            this->impl_M_.copy_children_M_(&this->impl_M_.header_M_, where.node_ptr_M_());
+            node_ptr_T_ new__ = this->impl_M_.get_node_M_(*where);
+            if (where.node_ptr_M_()->has_children_M_())
+            { this->copy_children_M_(new__, where); }
+            new__->hook_as_last_child_M_(&this->impl_M_.header_M_);
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            this->_M_impl._M_header.update_depth_M_();
+        #endif
+        }
+
+        /**
+         * @brief subtree assignment.
+         */
+        template <traversal Traversal>
+        flex_tree& operator=(const_iterator<Traversal> where) TRL_NOEXCEPT
+        {
+        #ifndef TRL_FLEX_TREE_NOEXCEPT
+            if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
+        #else
+            assert(!where.node_ptr_M_()->is_root_M_());
+        #endif
+            this->clear();
+            node_ptr_T_ new__ = this->impl_M_.get_node_M_(*where);
+            if (where.node_ptr_M_()->has_children_M_())
+            { this->copy_children_M_(new__, where); }
+            new__->hook_as_last_child_M_(&this->impl_M_.header_M_);
         #ifdef TRL_FLEX_TREE_FAST_DEPTH
             this->_M_impl._M_header.update_depth_M_();
         #endif
@@ -944,8 +989,8 @@ namespace trl
         flex_tree(const flex_tree& other) noexcept
             : flex_tree(other.get_allocator())
         { 
-            this->clear();
-            this->copy_children_M_(&this->impl_M_.header_M_, &other.impl_M_.header_M_);
+            if (other.impl_M_.header_M_.has_children_M_())
+            { this->copy_children_M_(&this->impl_M_.header_M_, &other.impl_M_.header_M_); }
         }
 
         /**
@@ -960,7 +1005,7 @@ namespace trl
          */
         flex_tree& 
         operator=(flex_tree other) noexcept
-        { swap(*this, other); return *this; }
+        { this->clear(); swap(*this, other); return *this; }
 
         /**
          * @brief move assignment.
@@ -991,8 +1036,8 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
-        begin() 
-        { return iterator<Traversal>(this->size() ? this->impl_M_.header_M_.first_child_M_ : &this->impl_M_.header_M_); }
+        begin() noexcept
+        { return iterator<Traversal>(this->impl_M_.header_M_.first_child_M_); }
         
         /**
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
@@ -1000,8 +1045,8 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         const_iterator<Traversal> 
-        cbegin() const 
-        { return const_iterator<Traversal>(this->size() ? this->impl_M_.header_M_.first_child_M_ : &this->impl_M_.header_M_); }
+        cbegin() const noexcept
+        { return const_iterator<Traversal>(this->impl_M_.header_M_.first_child_M_); }
 
         /**
          * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
@@ -1009,7 +1054,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
-        end() 
+        end() noexcept
         { return iterator<Traversal>(&this->impl_M_.header_M_); }
 
         /**
@@ -1018,7 +1063,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         const_iterator<Traversal> 
-        cend() const 
+        cend() const noexcept
         { return const_iterator<Traversal>(&this->impl_M_.header_M_); }
 
         /**
@@ -1027,7 +1072,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         reverse_iterator<Traversal> 
-        rbegin() 
+        rbegin() noexcept
         { return reverse_iterator<Traversal>(this->begin<Traversal>()); }
         
         /**
@@ -1036,7 +1081,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         const_reverse_iterator<Traversal> 
-        crbegin() const 
+        crbegin() const noexcept
         { return const_reverse_iterator(this->cbegin<Traversal>()); }
 
         /**
@@ -1045,7 +1090,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         reverse_iterator<Traversal> 
-        rend() 
+        rend() noexcept
         { return reverse_iterator<Traversal>(this->end<Traversal>()); }
 
         /**
@@ -1054,7 +1099,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         const_reverse_iterator<Traversal> 
-        crend() const 
+        crend() const noexcept
         { return const_reverse_iterator<Traversal>(this->cend<Traversal>()); }
 
         /**
@@ -1075,11 +1120,11 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
-        prepend(iterator<Traversal> where, const value_type& value)
+        prepend(iterator<Traversal> where, const value_type& value) noexcept
         {
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(value);
             new__->hook_as_first_child_M_(where); ++this->impl_M_.header_M_.size_M_;
-            return { new__, &this->impl_M_.header_M_ };
+            return iterator<Traversal>(new__);
         }
     
         /**
@@ -1091,11 +1136,11 @@ namespace trl
          */
         template <traversal Traversal = default_traversal, typename... Args>
         iterator<Traversal> 
-        emplace_prepend(iterator<Traversal> where, Args&&... args)
+        emplace_prepend(iterator<Traversal> where, Args&&... args) noexcept
         {
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(std::forward<Args>(args)...);
             new__->hook_as_first_child_M_(where); ++this->impl_M_.header_M_.size_M_;
-            return { new__, &this->impl_M_.header_M_ };
+            return iterator<Traversal>(new__);
         }
         
         /**
@@ -1107,11 +1152,11 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
-        append(iterator<Traversal> where, const value_type& value)
+        append(iterator<Traversal> where, const value_type& value) noexcept
         {
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(value); 
             new__->hook_as_last_child_M_(where); ++this->impl_M_.header_M_.size_M_;
-            return { new__, &this->impl_M_.header_M_ };
+            return iterator<Traversal>(new__);
         }
 
         /**
@@ -1123,11 +1168,11 @@ namespace trl
          */
         template <traversal Traversal = default_traversal, typename... Args>
         iterator<Traversal> 
-        emplace_append(iterator<Traversal> where, Args&&... args)
+        emplace_append(iterator<Traversal> where, Args&&... args) noexcept
         {
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(std::forward<Args>(args)...);
             new__->hook_as_last_child_M_(where); ++this->impl_M_.header_M_.size_M_;
-            return { new__, &this->impl_M_.header_M_ };
+            return iterator<Traversal>(new__);
         }
 
         /**
@@ -1141,7 +1186,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
-        insert_after(iterator<Traversal> where, const value_type& value)
+        insert_after(iterator<Traversal> where, const value_type& value) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
@@ -1150,7 +1195,7 @@ namespace trl
         #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(value);
             new__->hook_as_next_sibling_M_(where); ++this->impl_M_.header_M_.size_M_;
-            return { new__, &this->impl_M_.header_M_ };
+            return iterator<Traversal>(new__);
         }
             
         /**
@@ -1164,7 +1209,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal, typename... Args>
         iterator<Traversal> 
-        emplace_after(iterator<Traversal> where, Args&&... args)
+        emplace_after(iterator<Traversal> where, Args&&... args) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
@@ -1173,7 +1218,7 @@ namespace trl
         #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(std::forward<Args>(args)...);
             new__->hook_as_next_sibling_M_(where); ++this->impl_M_.header_M_.size_M_;
-            return { new__, &this->impl_M_.header_M_ };
+            return iterator<Traversal>(new__);
         }
 
         /**
@@ -1187,7 +1232,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
-        insert_before(iterator<Traversal> where, const value_type& value)
+        insert_before(iterator<Traversal> where, const value_type& value) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
@@ -1196,7 +1241,7 @@ namespace trl
         #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(value);
             new__->hook_as_prev_sibling_M_(where); ++this->impl_M_.header_M_.size_M_;
-            return { new__, &this->impl_M_.header_M_ };
+            return iterator<Traversal>(new__);
         }
     
         /**
@@ -1210,7 +1255,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal, typename... Args>
         iterator<Traversal> 
-        emplace_before(iterator<Traversal> where, Args&&... args)
+        emplace_before(iterator<Traversal> where, Args&&... args) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
@@ -1218,8 +1263,8 @@ namespace trl
             assert(!where.node_ptr_M_()->is_root_M_());
         #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(std::forward<Args>(args)...); 
-            new__->_hook_as_prev_sibling(where); ++this->impl_M_.header_M_.size_M_;
-            return { new__, &this->impl_M_.header_M_ };
+            new__->hook_as_prev_sibling_M_(where); ++this->impl_M_.header_M_.size_M_;
+            return iterator<Traversal>(new__);
         }
         
         /**
@@ -1243,7 +1288,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
-        concatenate_append(iterator<Traversal> where, iterator<Traversal> src)
+        concatenate_append(iterator<Traversal> where, iterator<Traversal> src) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
@@ -1251,9 +1296,10 @@ namespace trl
             assert(!src.node_ptr_M_()->is_root_M_());
         #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(*src);
-            this->copy_children_M_(new__, src);
+            if (src.node_ptr_M_()->has_children_M_())
+            { this->copy_children_M_(new__, src); }
             new__->hook_as_last_child_M_(where);
-            return new__;
+            return iterator<Traversal>(new__);
         }
 
         /**
@@ -1267,7 +1313,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
-        concatenate_prepend(iterator<Traversal> where, iterator<Traversal> src)
+        concatenate_prepend(iterator<Traversal> where, iterator<Traversal> src) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
@@ -1275,9 +1321,10 @@ namespace trl
             assert(!src.node_ptr_M_()->is_root_M_());
         #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(*src);
-            this->copy_children_M_(new__, src);
+            if (src.node_ptr_M_()->has_children_M_())
+            { this->copy_children_M_(new__, src); }
             new__->hook_as_first_child_M_(where);
-            return new__;
+            return iterator<Traversal>(new__);
         }
 
         /**
@@ -1291,7 +1338,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
-        concatenate_after(iterator<Traversal> where, iterator<Traversal> src)
+        concatenate_after(iterator<Traversal> where, iterator<Traversal> src) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
@@ -1301,9 +1348,10 @@ namespace trl
             assert(!src.node_ptr_M_()->is_root_M_());
         #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(*src);
-            this->copy_children_M_(new__, src);
+            if (src.node_ptr_M_()->has_children_M_())
+            { this->copy_children_M_(new__, src); }
             new__->hook_as_next_sibling_M_(where);
-            return new__;
+            return iterator<Traversal>(new__);
         }
 
         /**
@@ -1317,7 +1365,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
-        concatenate_before(iterator<Traversal> where, iterator<Traversal> src)
+        concatenate_before(iterator<Traversal> where, iterator<Traversal> src) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
@@ -1327,9 +1375,10 @@ namespace trl
             assert(!src.node_ptr_M_()->is_root_M_());
         #endif
             node_ptr_T_ new__ = this->impl_M_.get_node_M_(*src);
-            this->copy_children_M_(new__, src);
+            if (src.node_ptr_M_()->has_children_M_())
+            { this->copy_children_M_(new__, src); }
             new__->hook_as_prev_sibling_M_(where);
-            return new__;
+            return iterator<Traversal>(new__);
         }
 
         /**
@@ -1354,7 +1403,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         void
-        splice_append(iterator<Traversal> where, iterator<Traversal> src)
+        splice_append(iterator<Traversal> where, iterator<Traversal> src) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
@@ -1378,7 +1427,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         void
-        splice_prepend(iterator<Traversal> where, iterator<Traversal> src)
+        splice_prepend(iterator<Traversal> where, iterator<Traversal> src) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
@@ -1402,7 +1451,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         void
-        splice_after(iterator<Traversal> where, iterator<Traversal> src)
+        splice_after(iterator<Traversal> where, iterator<Traversal> src) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
@@ -1427,7 +1476,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         void
-        splice_before(iterator<Traversal> where, iterator<Traversal> src)
+        splice_before(iterator<Traversal> where, iterator<Traversal> src) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
@@ -1460,14 +1509,15 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         iterator<Traversal> 
-        erase(iterator<Traversal> where)
+        erase(iterator<Traversal> where) TRL_NOEXCEPT
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
         #else
             assert(!where.node_ptr_M_()->is_root_M_());
         #endif
-            this->impl_M_.header_M_.size_M_ -= this->erase_children_M_(where);
+            if (where.node_ptr_M_()->has_children_M_())
+            { this->impl_M_.header_M_.size_M_ -= this->erase_children_M_(where); }
             iterator<Traversal> next__ = std::next(where);
             where.node_ptr_M_()->unhook_M_();
             this->impl_M_.put_node_M_(static_cast<node_ptr_T_>(where.node_ptr_M_()));
@@ -1478,8 +1528,8 @@ namespace trl
          * @brief erases every node in the tree.
          */
         void 
-        clear()
-        { this->impl_M_.header_M_.size_M_ -= this->erase_children_M_(&this->impl_M_.header_M_); }
+        clear() noexcept
+        { if (this->size()) { this->impl_M_.header_M_.size_M_ -= this->erase_children_M_(&this->impl_M_.header_M_); } }
 
         /**
          * @}
@@ -1497,7 +1547,7 @@ namespace trl
          */
         template <traversal Traversal = default_traversal>
         std::size_t 
-        maximum_depth() const
+        maximum_depth() const noexcept
         {
             std::size_t res__{0ull};
             for (iterator<Traversal> it__ = this->begin<Traversal>(); it__ != end<Traversal>(); ++it__)
