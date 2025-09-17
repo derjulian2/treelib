@@ -1,4 +1,4 @@
-message("building python-binding")
+message("building treelib python-binding")
 
 # change hardcoded paths to finding python and pybind11 directories
 set(CMAKE_PREFIX_PATH "C:/Users/Julia/AppData/Local/Programs/Python/Python313/Lib/site-packages/pybind11")
@@ -10,7 +10,7 @@ find_package(pybind11 CONFIG REQUIRED)
 
 pybind11_add_module(treelib flex_tree.cpp)
 
-target_include_directories(treelib PUBLIC "C:/Users/Julia/AppData/Local/Programs/Python/Python313/Lib/site-packages/pybind11/include")
-target_include_directories(treelib PUBLIC "C:/Users/Julia/AppData/Local/Programs/Python/Python313/include")
+include_directories("C:/Users/Julia/AppData/Local/Programs/Python/Python313/Lib/site-packages/pybind11/include")
+include_directories("C:/Users/Julia/AppData/Local/Programs/Python/Python313/include")
 
 # target_link_libraries(treelib_python_binding "C:/Users/Julia/AppData/Local/Programs/Python/Python313/libs/python3.lib")

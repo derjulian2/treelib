@@ -30,10 +30,10 @@
  * - 'variable_M_' or 'method_M_()' describes private member variables or methods used internally by the implementation.
  *
  * TODO:
- * - clean up: review hook() unhook() code and unit-test, benchmark, document.
  * - friend relations with iterator
  * - traversal algorithms
  * - NO_RECURSION algorithms
+ * - optionally: review hook()/unhook() and erase()/copy() code, but should be fine
  */
 /********************************/
 #include <concepts>
@@ -827,7 +827,7 @@ namespace trl
                     { nodes_affected__ += erase_children_M_(iter__); }
 
                     base_ptr_T_ iter_next__{iter__->next_M_}; // save next node before deletion
-                    iter__->unhook_M_(); // delete after jumping down
+                    iter__->unhook_M_();
                     this->impl_M_.put_node_M_(static_cast<node_ptr_T_>(iter__)); /* static_cast should not fail as it is never called on root */
                     ++nodes_affected__;
 

@@ -64,10 +64,8 @@ namespace trl
         {
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
             if (ptr__->is_root_M_()) { throw std::logic_error("root-node cannot have a parent-node"); }
         #else
-            assert(ptr__);
             assert(!ptr__->is_root_M_()); 
         #endif
             return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
@@ -79,13 +77,11 @@ namespace trl
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
             if (!ptr__->has_next_M_()) { throw std::logic_error("node does not have a next node"); }
         #else
-            assert(ptr__); 
             assert(ptr__->has_next_M_()); 
         #endif
-            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
+            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->next_M_);
         }
 
         template <typename IteratorType>
@@ -94,13 +90,11 @@ namespace trl
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
             if (!ptr__->has_prev_M_()) { throw std::logic_error("node does not have a previous node"); }
         #else
-            assert(ptr__); 
             assert(ptr__->has_prev_M_()); 
         #endif
-            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
+            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->prev_M_);
         }
 
         template <typename IteratorType>
@@ -109,13 +103,11 @@ namespace trl
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
             if (!ptr__->has_children_M_()) { throw std::logic_error("node does not have any child-nodes"); }
         #else
-            assert(ptr__); 
             assert(ptr__->has_children_M_()); 
         #endif
-            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
+            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->first_child_M_);
         }
 
         template <typename IteratorType>
@@ -124,13 +116,11 @@ namespace trl
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
             if (!ptr__->has_children_M_()) { throw std::logic_error("node does not have any child-nodes"); }
         #else
-            assert(ptr__); 
             assert(ptr__->has_children_M_()); 
         #endif
-            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->parent_M_);
+            return detail__::iter_util__<IteratorType>::construct_from_ptr_M_(ptr__->last_child_M_);
         }
 
         template <typename IteratorType>
@@ -138,11 +128,6 @@ namespace trl
         depth(IteratorType iter)
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #else
-            assert(ptr__); 
-        #endif
             return ptr__->depth_M_(); 
         }
 
@@ -151,11 +136,6 @@ namespace trl
         child_count(IteratorType iter) 
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #else
-            assert(ptr__); 
-        #endif
             return ptr__->child_count_M_; 
         }
 
@@ -164,11 +144,6 @@ namespace trl
         is_root(IteratorType iter)
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #else
-            assert(ptr__); 
-        #endif
             return ptr__->is_root_M_(); 
         }
 
@@ -177,11 +152,6 @@ namespace trl
         is_first_child(IteratorType iter)
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #else
-            assert(ptr__); 
-        #endif
             return ptr__->is_first_child_M_(); 
         }
 
@@ -190,11 +160,6 @@ namespace trl
         is_last_child(IteratorType iter)
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #else
-            assert(ptr__); 
-        #endif
             return ptr__->is_last_child_M_();
         }
 
@@ -203,11 +168,6 @@ namespace trl
         has_next(IteratorType iter)
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #else
-            assert(ptr__); 
-        #endif
             return ptr__->has_next_M_();
         }
 
@@ -216,11 +176,6 @@ namespace trl
         has_previous(IteratorType iter) 
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #else
-            assert(ptr__); 
-        #endif
             return ptr__->has_prev_M_();
         }
 
@@ -229,11 +184,6 @@ namespace trl
         has_children(IteratorType iter) 
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
-        #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
-        #else
-            assert(ptr__); 
-        #endif
             return ptr__->has_children_M_(); 
         }
 
@@ -243,10 +193,8 @@ namespace trl
         { 
             auto ptr__ = detail__::iter_util__<IteratorType>::get_node_ptr_M_(iter);
         #ifndef TRL_NODE_TRAITS_NOEXCEPT
-            if (!ptr__) { throw std::logic_error("invalid iterator"); }
             if (ptr__->is_root_M_()) { throw std::logic_error("root-node cannot be an only-child"); }
         #else
-            assert(ptr__);
             assert(!ptr__->is_root_M_());
         #endif
             return ptr__->is_only_child_M_(); 

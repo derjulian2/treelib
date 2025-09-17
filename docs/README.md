@@ -5,6 +5,23 @@
 - Tested on Python-Versions: None
 - Documentation:
 
+# Installation
+
+to use treelib, you basically only need the desired header-files contained in `include/treelib`
+and include them into your project. 
+
+alternatively, you can also clone the entire repo and add it as a CMake-package:
+`> git clone https://github.com/derjulian2/treelib.git`
+
+in your project's `CMakeLists.txt`, you would add something like:
+```cmake
+set(treelib_DIR "[the_path_to_where_you_cloned_it_to]")
+find_package(treelib CONFIG REQUIRED)
+if (treelib_FOUND)
+    include_directories(${treelib_INCLUDE_DIR})
+endif()
+```
+
 # Features
 
 - `trl::flex_tree` class-template: an STL-like 'arbitrary'-ary tree data-structure:
@@ -78,7 +95,7 @@ the `trl::flex_tree` template is a <ins>node-based</ins> container (as e.g. `std
 a node that also contains metadata such as pointers to other nodes. the following diagram illustrates what pointers
 each node holds and what pointer-relations nodes can have to each other:
 
-![flex_tree_diagram](flex_tree_diagram.svg)
+![flex_tree_structure_diagram](flex_tree_structure.svg)
 
 arrows pointing to nothing indicate a __nullptr__. nodes that are on the same level are always connected to each other as
 if they were in a doubly-linked-list (without the ends tied to a ring), even if they are not of the same parent.
