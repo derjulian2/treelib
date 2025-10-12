@@ -1,9 +1,10 @@
+/********************************/
 #ifndef TRL_FLEX_TREE_HPP
 #define TRL_FLEX_TREE_HPP
-
+/********************************/
 /**
  * @file    flex_tree.hpp
- * @date    15/09/2025
+ * @date    10/10/2025
  * @author  Julian Benzel
  *
  * @brief
@@ -22,6 +23,9 @@
  *   disables exception-safety for iterators specifically. also disabled if TRL_FLEX_TREE_NOEXCEPT is defined.
  * - #define NDEBUG (defined in release-builds)
  *   disables debug-asserts for invalid operations on a tree.
+ * - #define TRL_FLEX_TREE_STL_REVERSE_ITER
+ *   uses std::reverse_iterator for constructing flex_tree<>::reverse_iterator instead a custom implementation.
+ *   for rationale/details see the documentation.
  * 
  * naming-schemes:
  * - 'name__' describes an implementation namespace or type used internally by the implementation.
@@ -33,7 +37,7 @@
  * - friend relations with iterator
  * - traversal algorithms
  * - NO_RECURSION algorithms
- * - optionally: review hook()/unhook() and erase()/copy() code, but should be fine
+ * - allocation-methods could maybe throw std::bad_alloc, and are used in noexcept functions. maybe review that.
  */
 /********************************/
 #include <concepts>
@@ -57,13 +61,22 @@
     #define TRL_ITER_NOEXCEPT noexcept
 #endif
 /********************************/
+#ifndef TRL_FLEX_TREE_DEFAULT_TRAVERSAL
+    #define TRL_FLEX_TREE_DEFAULT_TRAVERSAL depth_first_pre_order
+#endif
+/********************************/
 namespace trl
 {
 
     enum traversal
     {
         depth_first_pre_order,
+        depth_first_in_order,
         depth_first_post_order,
+
+        depth_first_reverse_pre_order,
+        depth_first_reverse_in_order,
+        depth_first_reverse_post_order,
         
         breadth_first_in_order,
         breadth_first_reverse_order
@@ -94,7 +107,7 @@ namespace trl
 
             std::size_t child_count_M_{0ull};
         #ifdef TRL_FLEX_TREE_FAST_DEPTH
-            std::size_t depth_M_{0ull};
+            std::size_t depth_count_M_{0ull};
         #endif 
 
             /**
@@ -119,11 +132,25 @@ namespace trl
                 return res__;
             }
 
+            bool 
+            is_child_of(c_base_pointer_T_ parent__) const
+            {
+                c_base_pointer_T_ iter__{this->parent_M_};
+                do
+                {
+                    if (iter__ == parent__)
+                    { return true; } 
+                    iter__ = iter__->parent_M_; 
+                }
+                while (!iter__->is_root_M_());
+                return false;
+            } 
+
             std::size_t 
             depth_M_() const
             {
             #ifdef TRL_FLEX_TREE_FAST_DEPTH
-                return this->depth_M_;
+                return this->depth_count_M_;
             #else
                 c_base_pointer_T_ iter__{this};
                 std::size_t res__{0ull};
@@ -133,20 +160,12 @@ namespace trl
             #endif
             }
 
-        #ifdef TRL_FLEX_TREE_FAST_DEPTH
-            void 
-            update_depth_M_()
-            {
-
-            }
-        #endif
-
             bool 
             is_root_M_() const 
             { return this->parent_M_ == this; }
 
             bool 
-            is_first_child_M_() const
+            is_first_child_M_() const /* why not just 'this == this->parent_M_->first_child_M_' ? (would always be false for root) */
             { return !this->has_prev_M_() || this->prev_M_->parent_M_ != this->parent_M_; }
             
             bool 
@@ -179,7 +198,7 @@ namespace trl
                 this->parent_M_ = parent__;
                 ++parent__->child_count_M_;
             #ifdef TRL_FLEX_TREE_FAST_DEPTH
-                this->depth_M_ = _parent->depth_M_ + 1;
+                this->depth_count_M_ = parent__->depth_count_M_ + 1;
             #endif
             }
 
@@ -352,36 +371,6 @@ namespace trl
                 { this->unhook_as_first_child_M_(); }
             }
 
-        #ifdef TRL_FLEX_TREE_FAST_DEPTH
-
-            std::size_t 
-            update_depth_M_() // update all child-nodes' depth-values to this->_M_depth + distance_to_this
-            {
-                _node* _iter{_M_first_child};
-                std::size_t _nodes_affected{0};
-
-            #ifdef TRL_FLEX_TREE_NO_RECURSION
-                while (_iter != (this->_has_next() ? this->_M_next : this))
-                {
-                    _iter->_M_depth = _iter->_M_parent->_M_depth + 1;
-                    _iter = _next<depth_first_pre_order>(_iter);
-                    ++_nodes_affected;
-                }
-            #else
-                while (_iter)
-                {
-                    _iter->_M_depth = this->depth_M_ + 1; // update before jumping down
-                    if (_iter->_has_children()) { _nodes_affected += _iter->_update_depth(); }
-                    ++_nodes_affected;
-                    _iter = _iter->_M_next;
-                }
-            #endif
-
-                return _nodes_affected;
-            }
-
-        #endif
-
         };
 
 
@@ -404,7 +393,7 @@ namespace trl
                 if (iter__->has_children_M_()) 
                 { return iter__->first_child_M_; }
                 while (iter__->is_last_child_M_() && !iter__->is_root_M_()) 
-                { iter__ = iter__->parent_M_; }
+                { iter__ = iter__->parent_M_;  }
                 return iter__->next_M_;
             }
 
@@ -419,96 +408,24 @@ namespace trl
 
             static base_ptr_T_ prev_M_(base_ptr_T_ iter__)
             {
-                return nullptr;
+                if (iter__->is_first_child_M_() && !iter__->is_root_M_())
+                { return iter__->parent_M_; }
+                iter__ = iter__->prev_M_;
+                while (iter__->has_children_M_())
+                { iter__ = iter__->last_child_M_; }
+                return iter__;
             }
 
             static c_base_ptr_T_ prev_M_(c_base_ptr_T_ iter__)
             {
-                return nullptr;
+                if (iter__->is_first_child_M_() && !iter__->is_root_M_())
+                { return iter__->parent_M_; }
+                iter__ = iter__->prev_M_;
+                while (iter__->has_children_M_())
+                { iter__ = iter__->last_child_M_; }
+                return iter__;
             }
         };
-
-        template <>
-        struct traversal_algorithm__<depth_first_post_order>
-        {
-            using base_ptr_T_ = flex_tree_node_base__*;
-            using c_base_ptr_T_ = const flex_tree_node_base__*;
-
-            static base_ptr_T_ next_M_(base_ptr_T_ iter__)
-            {
-                return nullptr;
-            }
-
-            static c_base_ptr_T_ next_M_(c_base_ptr_T_ iter__)
-            {
-                return nullptr;
-            }
-
-            static base_ptr_T_ prev_M_(base_ptr_T_ iter__)
-            {
-                return nullptr;
-            }
-
-            static c_base_ptr_T_ prev_M_(c_base_ptr_T_ iter__)
-            {
-                return nullptr;
-            }
-        };
-
-        template <>
-        struct traversal_algorithm__<breadth_first_in_order>
-        {
-            using base_ptr_T_ = flex_tree_node_base__*;
-            using c_base_ptr_T_ = const flex_tree_node_base__*;
-
-            static base_ptr_T_ next_M_(base_ptr_T_ iter__)
-            {
-                return nullptr;
-            }
-
-            static c_base_ptr_T_ next_M_(c_base_ptr_T_ iter__)
-            {
-                return nullptr;
-            }
-
-            static base_ptr_T_ prev_M_(base_ptr_T_ iter__)
-            {
-                return nullptr;
-            }
-
-            static c_base_ptr_T_ prev_M_(c_base_ptr_T_ iter__)
-            {
-                return nullptr;
-            }
-        };
-
-        template <>
-        struct traversal_algorithm__<breadth_first_reverse_order>
-        {
-            using base_ptr_T_ = flex_tree_node_base__*;
-            using c_base_ptr_T_ = const flex_tree_node_base__*;
-
-            static base_ptr_T_ next_M_(base_ptr_T_ iter__)
-            {
-                return nullptr;
-            }
-
-            static c_base_ptr_T_ next_M_(c_base_ptr_T_ iter__)
-            {
-                return nullptr;
-            }
-
-            static base_ptr_T_ prev_M_(base_ptr_T_ iter__)
-            {
-                return nullptr;
-            }
-
-            static c_base_ptr_T_ prev_M_(c_base_ptr_T_ iter__)
-            {
-                return nullptr;
-            }
-        };
-
 
         /**
          * @brief
@@ -600,9 +517,14 @@ namespace trl
             }
         };
 
+
+        template <traversal Trav__, typename ValTp__, bool Const__>
+        struct flex_tree_iterator_base__
+        { };
+
         /**
          * @brief an iterator to a flex_tree.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          */
         template <traversal Trav__, typename ValTp__, bool Const__>
         struct flex_tree_iterator__
@@ -701,6 +623,79 @@ namespace trl
             
         };
 
+        /*
+         * custom reverse-iterator adaptor for flex_tree::iterator.
+         * for STL std::reverse_iterator-compliance, use TRL_FLEX_TREE_STL_REVERSE_ITER.
+         *
+         * the rationale behind this custom adaptor is the way std::reverse_iterator handles dereferences
+         * and works internally. std::reverse_iterator(tree.end()) would hold an instance of an end()-iterator
+         * internally, but on dereference, it would return *(end() - 1), which in my case is undesired behaviour,
+         * as this dereference requires invoking the iteration-algorithm each time, potentially causing large overhead.
+         */
+        template <typename IterTp__>
+        struct flex_tree_reverse_iterator__
+            : public IterTp__
+        {
+            using base_type = IterTp__;
+            using iterator_category = base_type::iterator_category;
+            using value_type = base_type::value_type;
+            using difference_type = base_type::difference_type;
+            using pointer = base_type::pointer;
+            using reference = base_type::reference;
+
+            using self_T_ = flex_tree_reverse_iterator__;
+            using self_ref_T_ = self_T_&;
+
+            explicit flex_tree_reverse_iterator__(const base_type& iter__)
+                : base_type(iter__)
+            { }
+
+            base_type& 
+            base()
+            { return static_cast<base_type&>(*this); }
+
+            const base_type& 
+            base() const
+            { return static_cast<const base_type&>(*this); }
+
+            self_ref_T_
+            operator++() noexcept
+            { --this->base(); return *this; }
+
+            self_T_
+            operator++(int) noexcept
+            { this->base()--; return *this; }
+
+            self_ref_T_
+            operator--() noexcept
+            { ++this->base(); return *this; }
+
+            self_T_
+            operator--(int) noexcept
+            { this->base()++; return *this; }
+
+            /* equality operators can be omitted as those of the base-iterator are used */
+
+        };
+
+        /* 
+         * partial specialization for breadth-first iterator.
+         *
+         * the breadth-first algorithm requires some sort of guidance to
+         * determine what direction it should advance to in each level of the tree.
+         * for this, we can either use `(.depth() % 2)` of the current node to determine
+         * if the next node should be to the left or right, or we can use an extra variable, which
+         * is what this specialization is for.
+         * the extra variable omits the .depth() call, which could be slow (depending on your macro configuration).
+         */
+        // #ifndef TRL_FLEX_TREE_SMALL_BREADTH_FIRST_ITER
+        // template <typename ValTp__, bool Const__>
+        // struct flex_tree_iterator__<breadth_first_in_order, ValTp__, Const__>
+        // {
+        //     /* variable to determine in which direction the next node is (left (0) or right (1))*/
+        //     bool dir_M_{false};
+        // };
+
         /**
          * contains all allocation/deallocation logic for nodes in the flex-tree 
          * (with the exception of the node-initializer, see that for more info).
@@ -753,6 +748,40 @@ namespace trl
                     : node_alloc_T_(node_alloc_) 
                 { }
             };
+
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+
+            /**
+             * recursively update depth-member variable of node__ and all of it's descendants.
+             * maybe review semantics of this method to only change depth of child-nodes ?
+             */
+            std::size_t
+            update_depth_M_(base_ptr_T_ node__, std::size_t depth__)
+            {
+                assert(node__->has_children_M_());
+
+                node__->depth_count_M_ = depth__;
+                base_ptr_T_ iter__ = node__->first_child_M_;
+                std::size_t nodes_affected__{0ull};
+            #ifdef TRL_FLEX_TREE_NO_RECURSION
+
+            #else
+                while (true)
+                {
+                    if (iter__->has_children_M_())
+                    { nodes_affected__ += update_depth_M_(iter__, depth__ + 1); }
+                    else
+                    { iter__->depth_count_M_ = depth__ + 1; }
+                    ++nodes_affected__;
+                    if (!iter__->has_next_M_())
+                    { break; }
+                    iter__ = iter__->next_M_;
+                }
+            #endif
+                return nodes_affected__;
+            }
+
+        #endif
 
             /**
              * OK to be called on any value-node or on the header as the header will never be a child-node of any other node.
@@ -859,7 +888,7 @@ namespace trl
     {
     public:
 
-        static constexpr traversal default_traversal = depth_first_pre_order;
+        static constexpr traversal default_traversal = TRL_FLEX_TREE_DEFAULT_TRAVERSAL;
 
         using value_type = Type;
         using allocator_type = Allocator;
@@ -871,12 +900,20 @@ namespace trl
 
         template <traversal Traversal = default_traversal>
         using const_iterator = detail__::flex_tree_iterator__<Traversal, value_type, true>;
+    
+    #ifndef TRL_FLEX_TREE_STL_REVERSE_ITER
+        template <traversal Traversal = default_traversal>
+        using reverse_iterator = detail__::flex_tree_reverse_iterator__<iterator<Traversal>>;
 
+        template <traversal Traversal = default_traversal>
+        using const_reverse_iterator = detail__::flex_tree_reverse_iterator__<const_iterator<Traversal>>;
+    #else
         template <traversal Traversal = default_traversal>
         using reverse_iterator = std::reverse_iterator<iterator<Traversal>>;
 
         template <traversal Traversal = default_traversal>
         using const_reverse_iterator = std::reverse_iterator<const_iterator<Traversal>>;
+    #endif
         
     protected:
 
@@ -907,7 +944,7 @@ namespace trl
         {
             this->impl_M_.header_M_.from_initializer_list_M_(ilist);
         #ifdef TRL_FLEX_TREE_FAST_DEPTH
-            this->_M_impl._M_header.update_depth_M_();
+            this->update_depth_M_(&this->impl_M_.header_M_, 0);
         #endif
         }
 
@@ -920,14 +957,14 @@ namespace trl
             this->clear();
             this->impl_M_.header_M_.from_initializer_list_M_(ilist);
         #ifdef TRL_FLEX_TREE_FAST_DEPTH
-            this->_M_impl._M_header.update_depth_M_();
+            this->update_depth_M_(&this->impl_M_.header_M_, 0);
         #endif
         }
 
         /**
          * @brief subtree constructor from an iterator.
          * @param where an iterator to the node to be copied with all of it's descendants. 
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @note exceptions are thrown / the behaviour is undefined if:
          * - `where` is an `end()`-iterator.
          */
@@ -945,7 +982,7 @@ namespace trl
             { this->copy_children_M_(new__, where); }
             new__->hook_as_last_child_M_(&this->impl_M_.header_M_);
         #ifdef TRL_FLEX_TREE_FAST_DEPTH
-            this->_M_impl._M_header.update_depth_M_();
+            this->update_depth_M_(&this->impl_M_.header_M_, 0);
         #endif
         }
 
@@ -966,7 +1003,7 @@ namespace trl
             { this->copy_children_M_(new__, where); }
             new__->hook_as_last_child_M_(&this->impl_M_.header_M_);
         #ifdef TRL_FLEX_TREE_FAST_DEPTH
-            this->_M_impl._M_header.update_depth_M_();
+            this->update_depth_M_(&this->impl_M_.header_M_, 0);
         #endif
         }
 
@@ -1031,7 +1068,7 @@ namespace trl
          */
 
         /**
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the first-child-node of the root, or end() if the tree is empty.
          */
         template <traversal Traversal = default_traversal>
@@ -1040,7 +1077,7 @@ namespace trl
         { return iterator<Traversal>(this->impl_M_.header_M_.first_child_M_); }
         
         /**
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return a const-iterator to the first-child-node of the root, or end() if the tree is empty.
          */
         template <traversal Traversal = default_traversal>
@@ -1049,7 +1086,7 @@ namespace trl
         { return const_iterator<Traversal>(this->impl_M_.header_M_.first_child_M_); }
 
         /**
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the true root-node of the tree, acting as a valueless sentinel-node.
          */
         template <traversal Traversal = default_traversal>
@@ -1058,7 +1095,7 @@ namespace trl
         { return iterator<Traversal>(&this->impl_M_.header_M_); }
 
         /**
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return a const-iterator to the true root-node of the tree, acting as a valueless sentinel-node.
          */
         template <traversal Traversal = default_traversal>
@@ -1067,40 +1104,56 @@ namespace trl
         { return const_iterator<Traversal>(&this->impl_M_.header_M_); }
 
         /**
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return a reverse-iterator to the first-child-node of the root, or end() if the tree is empty.
          */
         template <traversal Traversal = default_traversal>
         reverse_iterator<Traversal> 
         rbegin() noexcept
-        { return reverse_iterator<Traversal>(this->begin<Traversal>()); }
+    #ifdef TRL_FLEX_TREE_STL_REVERSE_ITER
+        { return reverse_iterator<Traversal>(this->end<Traversal>()); }
+    #else
+        { return reverse_iterator<Traversal>(--this->end<Traversal>()); }
+    #endif
         
         /**
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return a const-reverse-iterator to the first-child-node of the root, or end() if the tree is empty.
          */
         template <traversal Traversal = default_traversal>
         const_reverse_iterator<Traversal> 
         crbegin() const noexcept
-        { return const_reverse_iterator(this->cbegin<Traversal>()); }
+    #ifdef TRL_FLEX_TREE_STL_REVERSE_ITER
+        { return reverse_iterator<Traversal>(this->end<Traversal>()); }
+    #else
+        { return const_reverse_iterator<Traversal>(--this->cend<Traversal>()); }
+    #endif
 
         /**
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return a reverse-iterator to the true root-node of the tree, acting as a valueless sentinel-node.
          */
         template <traversal Traversal = default_traversal>
         reverse_iterator<Traversal> 
         rend() noexcept
+    #ifdef TRL_FLEX_TREE_STL_REVERSE_ITER
+        { return reverse_iterator<Traversal>(this->begin<Traversal>()); }
+    #else
         { return reverse_iterator<Traversal>(this->end<Traversal>()); }
+    #endif
 
         /**
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @returns a const-reverse-iterator to the true root-node of the tree, acting as a valueless sentinel-node.
          */
         template <traversal Traversal = default_traversal>
         const_reverse_iterator<Traversal> 
         crend() const noexcept
+    #ifdef TRL_FLEX_TREE_STL_REVERSE_ITER
+        { return const_reverse_iterator<Traversal>(this->cbegin<Traversal>()); }
+    #else
         { return const_reverse_iterator<Traversal>(this->cend<Traversal>()); }
+    #endif
 
         /**
          * @}
@@ -1115,7 +1168,7 @@ namespace trl
          * @brief insert a new child-node as `where`'s first-child.
          * @param where an iterator to the new node's parent node.
          * @param value the value that the node will initially hold.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the newly created node.
          */
         template <traversal Traversal = default_traversal>
@@ -1131,7 +1184,7 @@ namespace trl
          * @brief emplace a new child-node as `where`'s first-child.
          * @param where an iterator to the new node's parent node.
          * @param args constructor arguments that are forwarded into the value of the new node.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the newly created node.
          */
         template <traversal Traversal = default_traversal, typename... Args>
@@ -1147,7 +1200,7 @@ namespace trl
          * @brief insert a new child-node as `where`'s last-child.
          * @param where an iterator to the new node's parent node.
          * @param value the value that the node will initially hold.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the newly created node.
          */
         template <traversal Traversal = default_traversal>
@@ -1163,7 +1216,7 @@ namespace trl
          * @brief emplace a new child-node as `where`'s last-child.
          * @param where an iterator to the new node's parent node.
          * @param args constructor arguments that are forwarded into the value of the new node.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the newly created node.
          */
         template <traversal Traversal = default_traversal, typename... Args>
@@ -1179,7 +1232,7 @@ namespace trl
          * @brief insert a new node as the next sibling of `where`.
          * @param where an iterator to the new node's previous sibling.
          * @param value the value that the node will initially hold.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the newly created node.
          * @note exceptions are thrown / behaviour is undefined if:
          * - `where` is an `end()`-iterator.
@@ -1202,7 +1255,7 @@ namespace trl
          * @brief emplace a new node as the next sibling of `where`.
          * @param where an iterator to the new node's previous sibling.
          * @param args constructor arguments that are forwarded into the value of the new node.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the newly created node.
          * @note exceptions are thrown / behaviour is undefined if:
          * - `where` is an `end()`-iterator.
@@ -1225,7 +1278,7 @@ namespace trl
          * @brief insert a new node as the previous sibling of `where`.
          * @param where an iterator to the new node's next sibling.
          * @param value the value that the node will initially hold.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the newly created node.
          * @note exceptions are thrown / behaviour is undefined if:
          * - `where` is an `end()`-iterator.
@@ -1248,7 +1301,7 @@ namespace trl
          * @brief emplace a new node as the previous sibling of `where`.
          * @param where an iterator to the new node's next sibling.
          * @param args constructor arguments that are forwarded into the value of the new node.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the newly created node.
          * @note exceptions are thrown / behaviour is undefined if:
          * - `where` is an `end()`-iterator.
@@ -1281,7 +1334,7 @@ namespace trl
          * @brief inserts an entire section of a tree with all of it's descendants at a given position by copying.
          * @param where an iterator to the node where the to-be-inserted tree should follow as the last-child.
          * @param src an iterator to the source-node that should be copied with all it's descendants. can be the same iterator as `where`.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the newly created node.
          * @note exceptions are thrown / behaviour is undefined if:
          * - `src` is an `end()`-iterator.
@@ -1299,6 +1352,9 @@ namespace trl
             if (src.node_ptr_M_()->has_children_M_())
             { this->copy_children_M_(new__, src); }
             new__->hook_as_last_child_M_(where);
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            this->update_depth_M_(new__, new__->parent_M_->depth_M_());
+        #endif
             return iterator<Traversal>(new__);
         }
 
@@ -1306,7 +1362,7 @@ namespace trl
          * @brief inserts an entire section of a tree with all of it's descendants at a given position by copying.
          * @param where an iterator to the node where the to-be-inserted tree should follow as the first-child.
          * @param src an iterator to the source-node that should be copied with all it's descendants. can be the same iterator as `where`.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the newly created node.
          * @note exceptions are thrown / behaviour is undefined if:
          * - `src` is an `end()`-iterator.
@@ -1324,6 +1380,9 @@ namespace trl
             if (src.node_ptr_M_()->has_children_M_())
             { this->copy_children_M_(new__, src); }
             new__->hook_as_first_child_M_(where);
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            this->update_depth_M_(new__, new__->parent_M_->depth_M_());
+        #endif
             return iterator<Traversal>(new__);
         }
 
@@ -1331,7 +1390,7 @@ namespace trl
          * @brief inserts an entire section of a tree with all of it's descendants at a given position by copying.
          * @param where an iterator to the node where the to-be-inserted tree should follow as the next sibling.
          * @param src an iterator to the source-node that should be copied with all it's descendants. can be the same iterator as `where`.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the newly created node.
          * @note exceptions are thrown / behaviour is undefined if:
          * - `where` or `src` is an `end()`-iterator.
@@ -1351,6 +1410,9 @@ namespace trl
             if (src.node_ptr_M_()->has_children_M_())
             { this->copy_children_M_(new__, src); }
             new__->hook_as_next_sibling_M_(where);
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            this->update_depth_M_(new__, new__->parent_M_->depth_M_());
+        #endif
             return iterator<Traversal>(new__);
         }
 
@@ -1358,7 +1420,7 @@ namespace trl
          * @brief inserts an entire section of a tree with all of it's descendants at a given position by copying.
          * @param where an iterator to the node where the to-be-inserted tree should follow as the previous sibling.
          * @param src an iterator to the source-node that should be copied with all it's descendants. can be the same iterator as `where`.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the newly created node.
          * @note exceptions are thrown / behaviour is undefined if:
          * - `where` or `src` is an `end()`-iterator.
@@ -1378,6 +1440,9 @@ namespace trl
             if (src.node_ptr_M_()->has_children_M_())
             { this->copy_children_M_(new__, src); }
             new__->hook_as_prev_sibling_M_(where);
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            this->update_depth_M_(new__, new__->parent_M_->depth_M_());
+        #endif
             return iterator<Traversal>(new__);
         }
 
@@ -1396,10 +1461,11 @@ namespace trl
          * @brief moves nodes from `src` behind the last-child of `where`, or insert's it as `where`'s first-child, if there are none.
          * @param where the node that should have `src` as it's last-child. 
          * @param src the node to be put behind `where`'s last-child, with all of it's descendants.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @note exceptions are thrown / the behaviour is undefined if:
          * - `src` is an `end()`-iterator.
          * - `where` and `src` point to the same node.
+         * - `where` is a child-node of `src`.
          */
         template <traversal Traversal = default_traversal>
         void
@@ -1407,23 +1473,29 @@ namespace trl
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
+            if (where.node_ptr_M_()->is_child_of(src.node_ptr_M_())) { throw std::invalid_argument("'where' cannot be a child-node of 'src'"); }
             if (where == src) { throw std::invalid_argument("cannot splice to the same node"); }
         #else
             assert(!src.node_ptr_M_()->is_root_M_())
+            assert(!where.node_ptr_M_()->is_child_of(src.node_ptr_M_()))
             assert(where != src);
         #endif
             src.ptr_M_->unhook_M_();
             src.ptr_M_->hook_as_last_child_M_(where);
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            this->update_depth_M_(src, src.ptr_M_->parent_M_->depth_M_());
+        #endif
         }
 
         /**
          * @brief moves nodes from `src` in front of the first-child of `where`, or insert's it as `where`'s first-child, if there are none.
          * @param where the node that should have `src` as it's first-child.
          * @param src the node to be put before `where`'s first-child, with all of it's descendants.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @note exceptions are thrown / the behaviour is undefined if:
          * - `src` is an `end()`-iterator.
          * - `where` and `src` point to the same node.
+         * - `where` is a child-node of `src`.
          */
         template <traversal Traversal = default_traversal>
         void
@@ -1431,23 +1503,29 @@ namespace trl
         {
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
+            if (where.node_ptr_M_()->is_child_of(src.node_ptr_M_())) { throw std::invalid_argument("'where' cannot be a child-node of 'src'"); }
             if (where == src) { throw std::invalid_argument("cannot splice to the same node"); }
         #else
             assert(!src.node_ptr_M_()->is_root_M_())
+            assert(!where.node_ptr_M_()->is_child_of(src.node_ptr_M_()))
             assert(where != src);
         #endif
             src.ptr_M_->unhook_M_();
             src.ptr_M_->hook_as_first_child_M_(where);
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            this->update_depth_M_(src, src.ptr_M_->parent_M_->depth_M_());
+        #endif
         }
 
         /**
          * @brief moves nodes from `src` behind `where`.
          * @param where the node that `src` should go after.
          * @param src the node to be put behind `where`, with all of it's descendants.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @note exceptions are thrown / the behaviour is undefined if:
          * - `where` or `src` is an `end()`-iterator.
          * - `where` and `src` point to the same node.
+         * - `where` is a child-node of `src`.
          */
         template <traversal Traversal = default_traversal>
         void
@@ -1456,23 +1534,29 @@ namespace trl
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
             if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
+            if (where.node_ptr_M_()->is_child_of(src.node_ptr_M_())) { throw std::invalid_argument("'where' cannot be a child-node of 'src'"); }
             if (where == src) { throw std::invalid_argument("cannot splice to the same node"); }
         #else
             assert(!where.node_ptr_M_()->is_root_M_() && !src.node_ptr_M_()->is_root_M_());
+            assert(!where.node_ptr_M_()->is_child_of(src.node_ptr_M_()))
             assert(where != src);
         #endif
             src.ptr_M_->unhook_M_();
             src.ptr_M_->hook_as_next_sibling_M_(where);
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            this->update_depth_M_(src, src.ptr_M_->parent_M_->depth_M_());
+        #endif
         }
 
         /**
          * @brief moves nodes from `src` in front of `where`.
          * @param where the node that `src` should go before.
          * @param src the node to be put before `where`, with all of it's descendants.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @note exceptions are thrown / the behaviour is undefined if:
          * - `where` or `src` is an `end()`-iterator.
          * - `where` and `src` point to the same node.
+         * - `where` is a child-node of `src`.
          */
         template <traversal Traversal = default_traversal>
         void
@@ -1481,13 +1565,18 @@ namespace trl
         #ifndef TRL_FLEX_TREE_NOEXCEPT
             if (where.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'where' cannot point to the root-node"); }
             if (src.node_ptr_M_()->is_root_M_()) { throw std::invalid_argument("'src' cannot point to the root-node"); }
+            if (where.node_ptr_M_()->is_child_of(src.node_ptr_M_())) { throw std::invalid_argument("'where' cannot be a child-node of 'src'"); }
             if (where == src) { throw std::invalid_argument("cannot splice to the same node"); }
         #else
             assert(!where.node_ptr_M_()->is_root_M_() && !src.node_ptr_M_()->is_root_M_());
+            assert(!where.node_ptr_M_()->is_child_of(src.node_ptr_M_()))
             assert(where != src);
         #endif
             src.ptr_M_->unhook_M_();
             src.ptr_M_->hook_as_prev_sibling_M_(where);
+        #ifdef TRL_FLEX_TREE_FAST_DEPTH
+            this->update_depth_M_(src, src.ptr_M_->parent_M_->depth_M_());
+        #endif
         }
         
         /**
@@ -1502,7 +1591,7 @@ namespace trl
         /**
          * @brief erases a node and all of it's descendants from the tree.
          * @param where the node to be erased.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return an iterator to the next valid node in the tree.
          * @note exceptions are thrown / the behaviour is undefined if:
          * - `where` is an `end()`-iterator.
@@ -1529,7 +1618,10 @@ namespace trl
          */
         void 
         clear() noexcept
-        { if (this->size()) { this->impl_M_.header_M_.size_M_ -= this->erase_children_M_(&this->impl_M_.header_M_); } }
+        { 
+            if (this->size()) 
+            { this->impl_M_.header_M_.size_M_ -= this->erase_children_M_(&this->impl_M_.header_M_); } 
+        }
 
         /**
          * @}
@@ -1542,7 +1634,7 @@ namespace trl
 
         /**
          * @brief determines the depth of the deepest node in the tree via a full iteration.
-         * @tparam Traversal the algorithm used to traverse the tree. default is depth-first.
+         * @tparam Traversal the algorithm used to traverse the tree.
          * @return the depth of the deepest node in the tree.
          */
         template <traversal Traversal = default_traversal>
@@ -1584,5 +1676,8 @@ namespace trl
     };
 
 }
+
+
+
 
 #endif

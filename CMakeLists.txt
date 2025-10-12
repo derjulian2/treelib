@@ -8,7 +8,7 @@ option(BUILD_EXAMPLES       "builds examples for treelib"       OFF)
 option(BUILD_TESTS          "builds unit-tests for treelib"     OFF)
 option(BUILD_PYTHON_BINDING "builds python-binding for treelib" OFF)
 
-set(BUILD_EXAMPLES ON)
+set(BUILD_TESTS ON)
 
 if (BUILD_EXAMPLES)
     add_subdirectory("examples")
