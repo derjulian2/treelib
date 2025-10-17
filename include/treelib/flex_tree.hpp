@@ -4,7 +4,7 @@
 /********************************/
 /**
  * @file    flex_tree.hpp
- * @date    10/10/2025
+ * @date    17/10/2025
  * @author  Julian Benzel
  *
  * @brief
@@ -34,9 +34,11 @@
  * - 'variable_M_' or 'method_M_()' describes private member variables or methods used internally by the implementation.
  *
  * TODO:
- * - friend relations with iterator
- * - traversal algorithms
+ * - tidy up iterator-template with friend relations to hide implementation-details.
+ * - tidy up iterator-base class because right now it is pretty much template-hell (but working template-hell).
  * - NO_RECURSION algorithms
+ * - test a lot probably.
+ * - maybe review hook()/unhook() methods?
  * - allocation-methods could maybe throw std::bad_alloc, and are used in noexcept functions. maybe review that.
  */
 /********************************/
@@ -71,15 +73,15 @@ namespace trl
     enum traversal
     {
         depth_first_pre_order,
-        depth_first_in_order,
-        depth_first_post_order,
+        // depth_first_in_order,
+        // depth_first_post_order,
 
-        depth_first_reverse_pre_order,
-        depth_first_reverse_in_order,
-        depth_first_reverse_post_order,
+        // depth_first_reverse_pre_order,
+        // depth_first_reverse_in_order,
+        // depth_first_reverse_post_order,
         
         breadth_first_in_order,
-        breadth_first_reverse_order
+        // breadth_first_reverse_order
     };
 
     namespace detail__
@@ -373,60 +375,6 @@ namespace trl
 
         };
 
-
-
-        /**
-         * @brief traversal algorithms.
-         */
-
-        template <traversal Trav__>
-        struct traversal_algorithm__;
-
-        template <>
-        struct traversal_algorithm__<depth_first_pre_order>
-        {
-            using base_ptr_T_ = flex_tree_node_base__*;
-            using c_base_ptr_T_ = const flex_tree_node_base__*;
-
-            static base_ptr_T_ next_M_(base_ptr_T_ iter__)
-            {
-                if (iter__->has_children_M_()) 
-                { return iter__->first_child_M_; }
-                while (iter__->is_last_child_M_() && !iter__->is_root_M_()) 
-                { iter__ = iter__->parent_M_;  }
-                return iter__->next_M_;
-            }
-
-            static c_base_ptr_T_ next_M_(c_base_ptr_T_ iter__)
-            {
-                if (iter__->has_children_M_()) 
-                { return iter__->first_child_M_; }
-                while (iter__->is_last_child_M_() && !iter__->is_root_M_()) 
-                { iter__ = iter__->parent_M_;  }
-                return iter__->next_M_;
-            }
-
-            static base_ptr_T_ prev_M_(base_ptr_T_ iter__)
-            {
-                if (iter__->is_first_child_M_() && !iter__->is_root_M_())
-                { return iter__->parent_M_; }
-                iter__ = iter__->prev_M_;
-                while (iter__->has_children_M_())
-                { iter__ = iter__->last_child_M_; }
-                return iter__;
-            }
-
-            static c_base_ptr_T_ prev_M_(c_base_ptr_T_ iter__)
-            {
-                if (iter__->is_first_child_M_() && !iter__->is_root_M_())
-                { return iter__->parent_M_; }
-                iter__ = iter__->prev_M_;
-                while (iter__->has_children_M_())
-                { iter__ = iter__->last_child_M_; }
-                return iter__;
-            }
-        };
-
         /**
          * @brief
          * an actual node in the tree.
@@ -517,19 +465,9 @@ namespace trl
             }
         };
 
-
-        template <traversal Trav__, typename ValTp__, bool Const__>
+        template <typename ValTp__, bool Const__>
         struct flex_tree_iterator_base__
-        { };
-
-        /**
-         * @brief an iterator to a flex_tree.
-         * @tparam Traversal the algorithm used to traverse the tree.
-         */
-        template <traversal Trav__, typename ValTp__, bool Const__>
-        struct flex_tree_iterator__
-        {
-
+        { 
             using iterator_category = std::bidirectional_iterator_tag;
             using value_type = std::conditional<Const__, const ValTp__, ValTp__>::type;
             using difference_type = std::ptrdiff_t;
@@ -539,28 +477,8 @@ namespace trl
             using node_ptr_T_ = std::conditional<Const__, const flex_tree_node__<ValTp__>*, flex_tree_node__<ValTp__>*>::type;
             using base_ptr_T_ = std::conditional<Const__, const flex_tree_node_base__*, flex_tree_node_base__*>::type;
 
-            using self_T_ = flex_tree_iterator__;
-            using self_ref_T_ = self_T_&;
-
             base_ptr_T_ ptr_M_{nullptr};
 
-            explicit flex_tree_iterator__(base_ptr_T_ ptr__) noexcept 
-                : ptr_M_(ptr__) 
-            { }
-
-            /* const-iterator construction from non-const-iterator */
-            template <traversal OTrav__>
-                requires Const__
-            explicit flex_tree_iterator__(const flex_tree_iterator__<OTrav__, ValTp__, false>& other) noexcept
-                : ptr_M_(other.ptr_M_)
-            { }
-
-            /* iterator conversions between algorithms */
-            template <traversal OTrav__>
-            explicit flex_tree_iterator__(const flex_tree_iterator__<OTrav__, ValTp__, Const__>& other) noexcept
-                : ptr_M_(other.ptr_M_)
-            { }
-            
             operator base_ptr_T_() noexcept
             { return ptr_M_; }
 
@@ -573,7 +491,8 @@ namespace trl
             operator*() const TRL_ITER_NOEXCEPT
             {
             #if !defined(TRL_FLEX_TREE_NOEXCEPT) && !defined(TRL_FLEX_TREE_ITER_NOEXCEPT)
-                if (this->ptr_M_->is_root_M_()) { throw std::logic_error("cannot dereference end()-iterator"); }
+                if (this->ptr_M_->is_root_M_()) 
+                { throw std::logic_error("cannot dereference end()-iterator"); }
             #else
                 assert(!this->ptr_M_->is_root_M_()); /* downcast will cause UB on end()-node. check only in debug. */
             #endif
@@ -592,35 +511,192 @@ namespace trl
                 return std::addressof(static_cast<node_ptr_T_>(this->ptr_M_)->value_M_); 
             }
 
-            self_ref_T_
-            operator++() noexcept
-            { this->ptr_M_ = traversal_algorithm__<Trav__>::next_M_(this->ptr_M_); return *this; }
+        };
 
-            self_T_
-            operator++(int) noexcept
-            { self_T_ old__(*this); ++(*this); return old__;  }
+        /**
+         * @brief an iterator to a flex_tree.
+         * @tparam Traversal the algorithm used to traverse the tree.
+         */
+        template <traversal Trav__, typename ValTp__, bool Const__>
+        struct flex_tree_iterator__ { };
 
-            self_ref_T_ 
-            operator--() noexcept
-            { this->ptr_M_ = traversal_algorithm__<Trav__>::prev_M_(this->ptr_M_); return *this; }
-
-            self_T_
-            operator--(int) noexcept
-            { self_T_ old__(*this); --(*this); return old__; }
-
+        template <typename IterTp__, typename ValTp__>
+        struct flex_tree_iterator_equality_base__
+        {
             /* iterators should be comparable even if they differ in algorithm or constness */
             template <traversal OTrav__, bool OConst__>
             friend bool 
-            operator==(const flex_tree_iterator__<Trav__, ValTp__, Const__>& i, 
+            operator==(const IterTp__& i, 
                        const flex_tree_iterator__<OTrav__, ValTp__, OConst__>& j) noexcept
             { return i.ptr_M_ == j.ptr_M_; }
            
             template <traversal OTrav__, bool OConst__>
             friend bool 
-            operator!=(const flex_tree_iterator__<Trav__, ValTp__, Const__>& i, 
+            operator!=(const IterTp__& i, 
                        const flex_tree_iterator__<OTrav__, ValTp__, OConst__>& j) noexcept
             { return !(i == j); } 
-            
+        };
+
+        template <typename ValTp__, bool Const__>
+        struct flex_tree_iterator__<depth_first_pre_order, ValTp__, Const__>
+            : public flex_tree_iterator_base__<ValTp__, Const__>,
+              public flex_tree_iterator_equality_base__<flex_tree_iterator__<depth_first_pre_order, ValTp__, Const__>, ValTp__>
+        {
+            using self_T_ = flex_tree_iterator__<depth_first_pre_order, ValTp__, Const__>;
+            using base_T_ = flex_tree_iterator_base__<ValTp__, Const__>;
+            using typename base_T_::base_ptr_T_;
+
+            flex_tree_iterator__() = default;
+
+            explicit flex_tree_iterator__(base_ptr_T_ ptr__) noexcept
+                : base_T_(ptr__)
+            { }
+
+            template <traversal OTrav__>
+                requires Const__
+            flex_tree_iterator__(const flex_tree_iterator__<OTrav__, ValTp__, false>& other) noexcept
+                : base_T_(other.ptr_M_)
+            { }
+
+            template <traversal OTrav__>
+            flex_tree_iterator__(const flex_tree_iterator__<OTrav__, ValTp__, Const__>& other) noexcept
+                : base_T_(other.ptr_M_)
+            { }
+
+            self_T_& 
+            operator++() noexcept
+            { 
+                if (this->ptr_M_->has_children_M_()) 
+                { this->ptr_M_ = this->ptr_M_->first_child_M_; return *this; }
+                while (this->ptr_M_->is_last_child_M_() && !this->ptr_M_->is_root_M_()) 
+                { this->ptr_M_ = this->ptr_M_->parent_M_;  }
+                this->ptr_M_ = this->ptr_M_->next_M_;
+                return *this;
+            }
+
+            self_T_&
+            operator--() noexcept
+            { 
+                if (this->ptr_M_->is_first_child_M_() && !this->ptr_M_->is_root_M_())
+                { this->ptr_M_ = this->ptr_M_->parent_M_; return *this; }
+                this->ptr_M_ = this->ptr_M_->prev_M_;
+                while (this->ptr_M_->has_children_M_())
+                { this->ptr_M_ = this->ptr_M_->last_child_M_; }
+                return *this;
+            }
+
+            self_T_
+            operator++(int) noexcept
+            { self_T_ old{*this}; ++(*this); return old; }
+
+            self_T_
+            operator--(int) noexcept
+            { self_T_ old{*this}; --(*this); return old; }
+
+        };
+
+        template <typename ValTp__, bool Const__>
+        struct flex_tree_iterator__<breadth_first_in_order, ValTp__, Const__>
+            : public flex_tree_iterator_base__<ValTp__, Const__>,
+              public flex_tree_iterator_equality_base__<flex_tree_iterator__<breadth_first_in_order, ValTp__, Const__>, ValTp__>
+        {
+            using self_T_ = flex_tree_iterator__<breadth_first_in_order, ValTp__, Const__>;
+            using base_T_ = flex_tree_iterator_base__<ValTp__, Const__>;
+            using typename base_T_::base_ptr_T_;
+
+            flex_tree_iterator__() = default;
+
+            explicit flex_tree_iterator__(base_ptr_T_ ptr__) noexcept
+                : base_T_(ptr__)
+            { }
+
+            template <traversal OTrav__>
+                requires Const__
+            flex_tree_iterator__(const flex_tree_iterator__<OTrav__, ValTp__, false>& other) noexcept
+                : base_T_(other.ptr_M_)
+            { }
+
+            template <traversal OTrav__>
+            flex_tree_iterator__(const flex_tree_iterator__<OTrav__, ValTp__, Const__>& other) noexcept
+                : base_T_(other.ptr_M_)
+            { }
+
+            self_T_& 
+            operator++() noexcept
+            { 
+                if (this->ptr_M_->depth_M_() % 2)
+                {
+                    if (this->ptr_M_->has_next_M_())
+                    { this->ptr_M_ = this->ptr_M_->next_M_; return *this; }
+                    while (!this->ptr_M_->has_children_M_())
+                    {
+                        if (!this->ptr_M_->has_prev_M_()) 
+                        { this->ptr_M_ = this->ptr_M_->find_root_M_(); return *this; }
+                        this->ptr_M_ = this->ptr_M_->prev_M_; 
+                    }
+                    this->ptr_M_ = this->ptr_M_->last_child_M_;
+                }
+                else
+                {
+                    if (this->ptr_M_->has_prev_M_())
+                    { this->ptr_M_ = this->ptr_M_->prev_M_; return *this; }
+                    while (!this->ptr_M_->has_children_M_())
+                    {
+                        if (!this->ptr_M_->has_next_M_()) 
+                        { this->ptr_M_ = this->ptr_M_->find_root_M_(); return *this; }
+                        this->ptr_M_ = this->ptr_M_->next_M_; 
+                    }
+                    this->ptr_M_ = this->ptr_M_->first_child_M_;
+                }
+                return *this;
+            }
+
+            self_T_&
+            operator--() noexcept
+            {   
+                if (this->ptr_M_->is_root_M_())
+                {
+                    /* 
+                     * extremely slow if operator-- is called on root, because the last
+                     * node in the deepest layer needs to be found. maybe there
+                     * is a smarter way to do this.
+                     *
+                     * maybe just don't implement this at all? as with depth-first?
+                     */
+                    base_ptr_T_ iter = this->ptr_M_;
+                    ++(*this);
+                    while (!this->ptr_M_->is_root_M_())
+                    { iter = this->ptr_M_; ++(*this); }
+                    this->ptr_M_ = iter;
+                    return *this;
+                }              
+                if (this->ptr_M_->depth_M_() % 2)
+                {
+                    if (this->ptr_M_->has_prev_M_())
+                    { this->ptr_M_ = this->ptr_M_->prev_M_; return *this; }
+                    this->ptr_M_ = this->ptr_M_->parent_M_;
+                    while (this->ptr_M_->has_next_M_())
+                    { this->ptr_M_ = this->ptr_M_->next_M_; }
+                }
+                else
+                {
+                    if (this->ptr_M_->has_next_M_())
+                    { this->ptr_M_ = this->ptr_M_->next_M_; return *this; }
+                    this->ptr_M_ = this->ptr_M_->parent_M_;
+                    while (this->ptr_M_->has_prev_M_())
+                    { this->ptr_M_ = this->ptr_M_->prev_M_; }
+
+                }
+                return *this;
+            }
+
+            self_T_
+            operator++(int) noexcept
+            { self_T_ old{*this}; ++(*this); return old; }
+
+            self_T_
+            operator--(int) noexcept
+            { self_T_ old{*this}; --(*this); return old; }
         };
 
         /*

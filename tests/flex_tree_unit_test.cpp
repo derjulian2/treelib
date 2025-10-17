@@ -1,57 +1,51 @@
 
 #include <iostream>
 #include <string>
-
+#include <algorithm>
 
 
 #include "../include/treelib/node_traits.hpp"
 #include "../include/treelib/flex_tree.hpp"
 
 
+
 int main(int argc, char** argv)
 {
     using namespace trl;
 
-    flex_tree<int> tree =
+    flex_tree<int> ftr
     {
         1,
         2,
+        4920,
     {
-        3,
+        6942,
         {
-            4,
-        {
-            5,
-            {
-                6,
-                7,
-                8
-            }
-        },
-            9,
-            10
+            6943,
+            6944,
+            6945
         }
     }
     };
 
-    std::cout << "forward depth-first:\n";
-    for (flex_tree<int>::iterator i = tree.begin(); i != tree.end(); ++i)
+    std::cout << "depth-first iteration:\n";
+    for (flex_tree<int>::iterator i = ftr.begin(); i != ftr.end(); ++i)
     {
-        std::cout << std::string(node_traits::depth(i), '-') << *i << "\n";
+        std::cout << std::string(node_traits::depth(i), '=') << ' ' << *i << '\n';
     }
 
-    std::cout << "backward depth-first:\n";
-    for (flex_tree<int>::reverse_iterator ri = tree.rbegin(); ri != tree.rend(); ++ri)
+    std::cout << "breadth-first iteration:\n";
+    for (flex_tree<int>::iterator<breadth_first_in_order> i = ftr.begin(); i != ftr.end(); ++i)
     {
-        std::cout << std::string(node_traits::depth(ri), '-') << *ri << "\n";
+        std::cout << std::string(node_traits::depth(i), '=') << ' ' << *i << '\n';
     }
+    
+    flex_tree<int>::iterator i = std::find(ftr.begin(), ftr.end(), 6942);
 
-    /* maybe introduce a leaf-iterator algorithm as a shortcut ? */
-    flex_tree<int>::iterator<breadth_first_in_order> five = std::find(tree.begin<breadth_first_in_order>(), tree.end<breadth_first_in_order>(), 5);
-    std::cout << "iterating over leaf-nodes:\n";
-    for (flex_tree<int>::iterator<breadth_first_in_order> i = node_traits::first_child(five); i != ++node_traits::last_child(five); ++i)
+    std::cout << "leaf iteration:\n";
+    for (leaf_iterator j = node_traits::lbegin(i); j != node_traits::lend(i); ++j)
     {
-
+        std::cout << std::string(node_traits::depth(j), '=') << ' ' << *j << '\n';
     }
 
     return 0;

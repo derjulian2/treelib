@@ -125,6 +125,48 @@ __erasing__ nodes and __clearing__ trees:
 - `.erase()` to erase a node in the tree.
 - `.clear()` to erase all nodes in a tree.
 
+# Example
+
+```cpp
+    using namespace trl;
+
+    flex_tree<int> ftr
+    {
+        1,
+        2,
+        4920,
+    {
+        6942,
+        {
+            6943,
+            6944,
+            6945
+        }
+    }
+    };
+
+    std::cout << "depth-first iteration:\n";
+    for (flex_tree<int>::iterator i = ftr.begin(); i != ftr.end(); ++i)
+    {
+        std::cout << std::string(node_traits::depth(i), '=') << ' ' << *i << '\n';
+    }
+
+    std::cout << "breadth-first iteration:\n";
+    for (flex_tree<int>::iterator<breadth_first_in_order> i = ftr.begin(); i != ftr.end(); ++i)
+    {
+        std::cout << std::string(node_traits::depth(i), '=') << ' ' << *i << '\n';
+    }
+    
+    /* uses depth-first as the iteration-algorithm. note that .begin() and .end() are also templates! */
+    flex_tree<int>::iterator i = std::find(ftr.begin(), ftr.end(), 6942);
+
+    std::cout << "leaf iteration:\n";
+    for (leaf_iterator j = node_traits::lbegin(i); j != node_traits::lend(i); ++j)
+    {
+        std::cout << std::string(node_traits::depth(j), '=') << ' ' << *j << '\n';
+    }
+```
+
 # Data-Structure Design
 
 the `trl::flex_tree` template is a node-based container (as e.g. `std::list`), where every value is contained within
