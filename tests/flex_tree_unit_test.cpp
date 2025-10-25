@@ -3,11 +3,7 @@
 #include <string>
 #include <algorithm>
 
-
-#include "../include/treelib/node_traits.hpp"
 #include "../include/treelib/flex_tree.hpp"
-
-
 
 int main(int argc, char** argv)
 {
@@ -29,7 +25,7 @@ int main(int argc, char** argv)
     };
 
     std::cout << "depth-first iteration:\n";
-    for (flex_tree<int>::iterator i = ftr.begin(); i != ftr.end(); ++i)
+    for (flex_tree<int>::iterator<> i = ftr.begin(); i != ftr.end(); ++i)
     {
         std::cout << std::string(node_traits::depth(i), '=') << ' ' << *i << '\n';
     }
@@ -39,14 +35,20 @@ int main(int argc, char** argv)
     {
         std::cout << std::string(node_traits::depth(i), '=') << ' ' << *i << '\n';
     }
-    
-    flex_tree<int>::iterator i = std::find(ftr.begin(), ftr.end(), 6942);
 
-    std::cout << "leaf iteration:\n";
-    for (leaf_iterator j = node_traits::lbegin(i); j != node_traits::lend(i); ++j)
-    {
-        std::cout << std::string(node_traits::depth(j), '=') << ' ' << *j << '\n';
-    }
+    // std::cout << "reverse iteration:\n";
+    // for (flex_tree<int>::reverse_iterator<> ri = ftr.rbegin(); ri != ftr.rend(); ++ri)
+    // {
+    //     std::cout << std::string(node_traits::depth(ri), '=') << ' ' << *ri << '\n';
+    // }
+    
+    flex_tree<int>::iterator<> i = std::find(ftr.begin(), ftr.end(), 6942);
+
+    // std::cout << "leaf iteration:\n";
+    // for (leaf_iterator<decltype(i)> j = node_traits::lbegin(i); j != node_traits::lend(i); ++j)
+    // {
+    //     std::cout << std::string(node_traits::depth(j), '=') << ' ' << *j << '\n';
+    // }
 
     return 0;
 }
