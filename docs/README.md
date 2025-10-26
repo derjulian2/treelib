@@ -1,9 +1,8 @@
 # treelib - tree data-structures for C++
 
-- Version: 0.0.3
-- Tested on C++-Compilers: MinGW
-- Tested on Python-Versions: n/a
-- Documentation: n/a
+- Version: 0.1.1
+- Tested on C++-Compilers: GCC 15.2.1-1 on Fedora-Linux 42
+- Documentation: n/a (doxygon-comments in-code)
 
 # Installation
 
@@ -58,18 +57,9 @@ trl::flex_tree<char> char_tree_from_ilist
 }
 ```
 
-construction from a `std::initializer-list` should still be quite performant, as the tree basically gets constructed from the inside-out.
-known limitations are:
-
-> [!NOTE]
-> construction using an initializer-list does not support custom allocator-instances, as the initializers are nested and will be called 
-> recursively. this makes it hard to use the allocator within the tree, as it might not be constructed at the point where the inner 
-> nodes are allocated and built.
-
-> [!NOTE]
-> when using the compile-option `TRL_FLEX_TREE_FAST_DEPTH`, construction from an initializer-list requires one full iteration of the tree at the 
-> end of construction to ensure proper depth-value bookkeeping. when constructing from the inside-out, the depth-values cannot be inferred 
-> inside of the individual node-constructors.
+construction using a `std::initializer_list` takes some overhead as the tree-information needs to be collected first (pointers to nodes get allocated),
+and only built after the control reaches the actual `flex_tree`-constructor. also allocator-instances need to be default-constructible and interchangeable
+for this method of construction to work, as there is no allocator-instance passed to the individual node-constructors, but rather a temporary is used.
 
 ## Tree-Iteration
 
@@ -129,42 +119,63 @@ __erasing__ nodes and __clearing__ trees:
 
 ```cpp
     using namespace trl;
+    using tree_type = flex_tree<std::string>;
+    /* type to retrieve information about nodes */
+    using traits_type = tree_type::node_traits;
 
-    flex_tree<int> ftr
+    /* construction using initializer-list */
+    tree_type ftr =
     {
-        1,
-        2,
-        4920,
+        "hello",
     {
-        6942,
+        "world",
         {
-            6943,
-            6944,
-            6945
+            "foo1",
+            "foo2"
+        }
+    },
+        "foo",
+    {
+        "bar",
+        {
+            "bogus",
+            "iltam",
+            "sumra"
         }
     }
     };
 
-    std::cout << "depth-first iteration:\n";
-    for (flex_tree<int>::iterator i = ftr.begin(); i != ftr.end(); ++i)
-    {
-        std::cout << std::string(node_traits::depth(i), '=') << ' ' << *i << '\n';
-    }
+    /* construction using member-functions */
+    // tree_type ftr;
+    // auto hello_ = ftr.append(ftr.end(), "hello");
+    // auto world_ = ftr.append(ftr.end(), "world");
+    // auto foo1_ = ftr.append(world_, "foo1");
+    // auto foo2_ = ftr.insert_after(foo1_, "foo2");
+    // auto foo_ = ftr.insert_after(world_, "foo");
+    // auto bar_ = ftr.append(ftr.end(), "bar");
+    // auto bogus_ = ftr.append(bar_, "bogus");
+    // auto sumra_ = ftr.append(bar_, "sumra");
+    // auto iltam_ = ftr.insert_before(sumra_, "iltam");
+    /* (uncomment one construction to see example-output) */
 
-    std::cout << "breadth-first iteration:\n";
-    for (flex_tree<int>::iterator<breadth_first_in_order> i = ftr.begin(); i != ftr.end(); ++i)
-    {
-        std::cout << std::string(node_traits::depth(i), '=') << ' ' << *i << '\n';
-    }
-    
-    /* uses depth-first as the iteration-algorithm. note that .begin() and .end() are also templates! */
-    flex_tree<int>::iterator i = std::find(ftr.begin(), ftr.end(), 6942);
+    /* regular depth-first traversal */
+    std::cout << "depth-first:\n";
+    for (tree_type::iterator i = ftr.begin(); i != ftr.end(); ++i)
+    { std::cout << std::string(traits_type::depth(i), '-') << *i << '\n'; }
 
-    std::cout << "leaf iteration:\n";
-    for (leaf_iterator j = node_traits::lbegin(i); j != node_traits::lend(i); ++j)
-    {
-        std::cout << std::string(node_traits::depth(j), '=') << ' ' << *j << '\n';
-    }
+    /* breadth-first traversal */
+    std::cout << "breadth-first:\n";
+    for (tree_type::iterator<breadth_first_in_order> i = ftr.begin(); i != ftr.end(); ++i)
+    { std::cout << std::string(traits_type::depth(i), '-') << *i << '\n'; }
+
+    /* searching for a value and replacing it. will use depth-first as default. */
+    *std::find(ftr.begin(), ftr.end(), "bogus") = "sugob";
+
+    auto i = std::find(ftr.begin(), ftr.end(), "bar");
+    /* leaf-iteration over every child of node 'bar' */
+    std::cout << "leaf-iteration over 'bar':\n";
+    for (tree_type::const_leaf_iterator cl = traits_type::lbegin(i); cl != traits_type::lend(i); ++cl)
+    { std::cout << std::string(traits_type::depth(cl), '-') << *cl << '\n'; }
 ```
 
 # Data-Structure Design
@@ -186,27 +197,25 @@ arrows going in a circle on a node indicate a `this`-pointer.
 - #define NDEBUG (should happen automatically by your compiler on release-builds):
 
 ## flex_tree.hpp
-
-- #define TRL_FLEX_TREE_NOEXCEPT:
-
-- #define TRL_FLEX_TREE_ITER_NOEXCEPT:
-
-- #define TRL_FLEX_TREE_NO_RECURSION:
-
-- #define TRL_FLEX_TREE_FAST_DEPTH:
-
-- #define TRL_FLEX_TREE_STL_REVERSE_ITER:
-
-## node_traits.hpp
-
-- #define TRL_NODE_TRAITS_NOEXCEPT:
-
-# Python-Binding
-
-mostly for practice, i want to make a python-binding for `trl::flex_tree` using [pybind11](https://github.com/pybind/pybind11). maybe someday!
+ - #define TRL_FLEX_TREE_FAST_DEPTH
+   includes .depth as a member-field of every node in the tree. provides faster access to depth() value, but also additional bookkeeping.
+ - #define TRL_FLEX_TREE_NO_RECURSION
+   some algorithms like node-copying or node-erasure use recursion to jump through every child-node. 
+   this flag will make them use the same depth-first iteration algorithm that flex_tree::iterator<depth_first_post_order> uses.
+ - #define TRL_FLEX_TREE_NOEXCEPT
+   disables exception-safety for invalid operations on a tree.
+ - #define TRL_FLEX_TREE_ITER_NOEXCEPT
+   disables exception-safety for iterators specifically. also disabled if TRL_FLEX_TREE_NOEXCEPT is defined.
+ - #define NDEBUG (defined in release-builds)
+   disables debug-asserts for invalid operations on a tree.
+ - #define TRL_FLEX_TREE_STL_REVERSE_ITER
+   uses std::reverse_iterator for constructing flex_tree<>::reverse_iterator instead a custom implementation.
+   for rationale/details see the documentation.
 
 # Future-Ideas:
 
+- python-binding using [pybind11](https://github.com/pybind/pybind11) (mostly as practice for me)
+- rethink the `trl::flex_tree` structure (the horizontal pointer-links between non-related nodes could cause a performance-hit on modifications).
 - `trl::n_ary_tree` class-template: optimized tree for holding exactly `n` child-nodes.
 - `trl::flat_flex_tree` class-template: similiar to `trl::flex_tree` but should keep it's nodes in a contiguous sequence for fastest iteration (but slower modifications).
 

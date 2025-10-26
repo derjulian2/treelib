@@ -8,47 +8,65 @@
 int main(int argc, char** argv)
 {
     using namespace trl;
+    using tree_type = flex_tree<std::string>;
+    /* type to retrieve information about nodes */
+    using traits_type = tree_type::node_traits;
 
-    flex_tree<int> ftr
+    /* construction using initializer-list */
+    tree_type ftr =
     {
-        1,
-        2,
-        4920,
+        "hello",
     {
-        6942,
+        "world",
         {
-            6943,
-            6944,
-            6945
+            "foo1",
+            "foo2"
+        }
+    },
+        "foo",
+    {
+        "bar",
+        {
+            "bogus",
+            "iltam",
+            "sumra"
         }
     }
     };
 
-    std::cout << "depth-first iteration:\n";
-    for (flex_tree<int>::iterator<> i = ftr.begin(); i != ftr.end(); ++i)
-    {
-        std::cout << std::string(node_traits::depth(i), '=') << ' ' << *i << '\n';
-    }
-
-    std::cout << "breadth-first iteration:\n";
-    for (flex_tree<int>::iterator<breadth_first_in_order> i = ftr.begin(); i != ftr.end(); ++i)
-    {
-        std::cout << std::string(node_traits::depth(i), '=') << ' ' << *i << '\n';
-    }
-
-    // std::cout << "reverse iteration:\n";
-    // for (flex_tree<int>::reverse_iterator<> ri = ftr.rbegin(); ri != ftr.rend(); ++ri)
-    // {
-    //     std::cout << std::string(node_traits::depth(ri), '=') << ' ' << *ri << '\n';
-    // }
     
-    flex_tree<int>::iterator<> i = std::find(ftr.begin(), ftr.end(), 6942);
 
-    // std::cout << "leaf iteration:\n";
-    // for (leaf_iterator<decltype(i)> j = node_traits::lbegin(i); j != node_traits::lend(i); ++j)
-    // {
-    //     std::cout << std::string(node_traits::depth(j), '=') << ' ' << *j << '\n';
-    // }
+    /* construction using member-functions */
+    // tree_type ftr;
+    // auto hello_ = ftr.append(ftr.end(), "hello");
+    // auto world_ = ftr.append(ftr.end(), "world");
+    // auto foo1_ = ftr.append(world_, "foo1");
+    // auto foo2_ = ftr.insert_after(foo1_, "foo2");
+    // auto foo_ = ftr.insert_after(world_, "foo");
+    // auto bar_ = ftr.append(ftr.end(), "bar");
+    // auto bogus_ = ftr.append(bar_, "bogus");
+    // auto sumra_ = ftr.append(bar_, "sumra");
+    // auto iltam_ = ftr.insert_before(sumra_, "iltam");
+    /* (uncomment one construction to see example-output) */
+
+    /* regular depth-first traversal */
+    std::cout << "depth-first:\n";
+    for (tree_type::iterator i = ftr.begin(); i != ftr.end(); ++i)
+    { std::cout << std::string(traits_type::depth(i), '-') << *i << '\n'; }
+
+    /* breadth-first traversal */
+    std::cout << "breadth-first:\n";
+    for (tree_type::iterator<breadth_first_in_order> i = ftr.begin(); i != ftr.end(); ++i)
+    { std::cout << std::string(traits_type::depth(i), '-') << *i << '\n'; }
+
+    /* searching for a value and replacing it. will use depth-first as default. */
+    *std::find(ftr.begin(), ftr.end(), "bogus") = "sugob";
+
+    auto i = std::find(ftr.begin(), ftr.end(), "bar");
+    /* leaf-iteration over every child of node 'bar' */
+    std::cout << "leaf-iteration over 'bar':\n";
+    for (tree_type::const_leaf_iterator cl = traits_type::lbegin(i); cl != traits_type::lend(i); ++cl)
+    { std::cout << std::string(traits_type::depth(cl), '-') << *cl << '\n'; }
 
     return 0;
 }
