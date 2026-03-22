@@ -212,18 +212,10 @@ arrows going in a circle on a node indicate a `this`-pointer.
    uses std::reverse_iterator for constructing flex_tree<>::reverse_iterator instead a custom implementation.
    for rationale/details see the documentation.
 
-# Future-Ideas:
-
-- python-binding using [pybind11](https://github.com/pybind/pybind11) (mostly as practice for me)
-- rethink the `trl::flex_tree` structure (the horizontal pointer-links between non-related nodes could cause a performance-hit on modifications).
-- `trl::n_ary_tree` class-template: optimized tree for holding exactly `n` child-nodes.
-- `trl::flat_flex_tree` class-template: similiar to `trl::flex_tree` but should keep it's nodes in a contiguous sequence for fastest iteration (but slower modifications).
-
 # Inspiration and Credits
 
-while creating this i researched different resources and how they handled certain problems i encountered.
-for this i want to thank and give credit to the sources that helped me find some general direction within all of this:
+throughout this project took inspiration and help from other
+great open-source projects, that i wish to credit here:
 
 - [tree.hh](https://github.com/kpeeters/tree.hh), by kpeeters.
 - [stl_list.h](https://gcc.gnu.org/onlinedocs/gcc-13.4.0/libstdc++/api/a00413_source.html), from gcc's STL `std::list` implemenation.
-- [pybind11](https://github.com/pybind/pybind11), that i want to use to generate the python-binding.
