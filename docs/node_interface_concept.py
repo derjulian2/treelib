@@ -2,6 +2,7 @@
 from typing import Iterable, Any, Self, Optional, TypeAlias, Type
 from abc import ABC, abstractmethod
 from enum import Enum
+from copy import copy
 
 
 class NodeInterface(ABC):
@@ -16,6 +17,11 @@ class NodeInterface(ABC):
 
     @abstractmethod
     def hooks(self) -> Iterable[HookType]:
+        pass
+
+    
+    @abstractmethod
+    def from_hook(self, h: HookType) -> Self:
         pass
 
 
@@ -52,8 +58,31 @@ class Tree:
             raise ValueError("invalid combination of None arguments")
 
 
+    def copy(self) -> Optional[Self]:
+        
+        def recursive_copy(n: NodeInterface) -> Optional[NodeInterface]:
+            cpy: NodeInterface = self.node_type(copy(n.get_value()))
+            # will be folded in C++ over hooks at compile-time (hopefully)
+            for h in cpy.hooks():
+                c: NodeInterface = n.from_hook(h)
+                if (c is None):
+                    continue
+                ccpy: NodeInterface = recursive_copy(c)
+                ccpy.hook_as(h, cpy)
+            return cpy
+
+        if (self.empty()):
+            return None
+        cpy = Tree(self.node_type)
+        cpy.root = recursive_copy(self.root)
+        return cpy
+    
+        
     def erase(self, where: NodeInterface, how) -> NodeInterface:
-        pass
+        
+        def recursive_erase(n: NodeInterface) -> None:
+            pass
+
 
 
     def empty(self) -> bool:
@@ -98,6 +127,13 @@ class BinaryTreeNode(NodeInterface):
         return BinaryTreeNode.Hooks
 
 
+    def from_hook(self, h: HookType) -> Self:
+        if (h == BinaryTreeNode.Hooks.left):
+            return self.left
+        else:
+            return self.right
+
+
     def hook_as(self, h: HookType, parent: Self) -> None:
         if (h == BinaryTreeNode.Hooks.left):
             parent.left = self
@@ -130,6 +166,15 @@ class RoseTreeNode(NodeInterface):
 
     def hooks(self) -> Iterable[HookType]:
         return RoseTreeNode.Hooks
+        
+
+    def from_hook(self, h: HookType) -> Self:
+        if (len(self.children_list) == 0):
+            return None
+        if (h == RoseTreeNode.Hooks.first):
+            return self.children_list[0]
+        else:
+            return self.children_list[-1]
 
 
     def hook_as(self, h: HookType, parent: Self) -> None:
@@ -141,6 +186,7 @@ class RoseTreeNode(NodeInterface):
 
     def children(self) -> Iterable[Self]:
         return self.children_list
+
 
 
 class RoseTreeNodeAlt(NodeInterface):
@@ -164,6 +210,13 @@ class RoseTreeNodeAlt(NodeInterface):
 
     def hooks(self) -> Iterable[HookType]:
         return RoseTreeNodeAlt.Hooks
+
+
+    def from_hook(self, h: HookType) -> Self:
+        if (h == RoseTreeNodeAlt.Hooks.first):
+            return self.first
+        else:
+            return self.next
 
 
     def hook_as(self, h: HookType, parent: Self) -> None:
@@ -208,6 +261,12 @@ def binary_tree_test() -> None:
 
     print([ 4, 2, 1, 3, 6, 5, 7 ] == [ n.get_value() for n in binTree.df_pre_order() ])
 
+    cpy: Tree = binTree.copy()
+    cpy.root.value = -1
+    
+    print([ -1, 2, 1, 3, 6, 5, 7 ] == [ n.get_value() for n in cpy.df_pre_order() ])
+    print([ 4, 2, 1, 3, 6, 5, 7 ] == [ n.get_value() for n in binTree.df_pre_order() ])
+
 
 def rose_tree_test() -> None:
     roseTree: Tree = Tree(RoseTreeNode)
@@ -238,6 +297,18 @@ def rose_tree_test() -> None:
 
     print([ n.get_value() for n in roseTree.df_pre_order() ])
     print([ n.get_value() for n in roseTreeAlt.df_pre_order() ])
+
+    cpy1: Tree = roseTree.copy()
+    cpy1.root.value = "-1"
+
+    cpy2: Tree = roseTreeAlt.copy()
+    cpy2.root.value = "-1"
+    
+    print([ n.get_value() for n in roseTree.df_pre_order() ])
+    print([ n.get_value() for n in roseTreeAlt.df_pre_order() ])
+
+    print([ n.get_value() for n in cpy1.df_pre_order() ])
+    print([ n.get_value() for n in cpy2.df_pre_order() ])
 
 
 binary_tree_test()
