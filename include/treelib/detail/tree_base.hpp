@@ -3,25 +3,50 @@
 #define TREELIB_TREE_BASE_HPP
 
 #include <memory>
+#include <type_traits>
 
 #include <treelib/detail/utility.hpp>
 #include <treelib/detail/node_base.hpp>
 
 namespace tl
 {
-    template <typename Allocator,
-              typename NodeAllocator>
-    struct tree_allocator_impl
-        : public NodeAllocator
+
+    template <typename NodeType,
+              typename Allocator>
+    struct tree_allocator_base
     {
+        using node_type    = NodeType;
+        using node_pointer = node_type*;
+        using hook_type    = typename node_type::hook_type;
+
         using allocator_type      = Allocator;
         using alloc_traits        = std::allocator_traits<allocator_type>;
 
-        using node_allocator_type = NodeAllocator;
+        using value_type          = typename alloc_traits::value_type; 
+        using value_node_type     = value_node<value_type, node_type>;
+        using value_node_pointer  = value_node_type*;
+
+        using node_allocator_type = alloc_traits::template rebind_alloc<value_node_type>;
         using node_alloc_traits   = std::allocator_traits<node_allocator_type>;
 
-        using value_node_pointer  = typename node_alloc_traits::pointer;
-    
+
+        [[no_unique_address]]
+        node_allocator_type m_alloc;
+
+        
+        [[nodiscard]]
+        constexpr
+        node_allocator_type&
+        get_node_alloc() noexcept
+        { return this->m_alloc; }
+
+
+        [[nodiscard]]
+        constexpr
+        allocator_type
+        get_allocator() const noexcept 
+        { return allocator_type(this->m_alloc); }
+
 
         template <typename... Args>
         [[nodiscard]]
@@ -29,8 +54,8 @@ namespace tl
         value_node_pointer
         get_node(Args&&... args)
         { 
-            value_node_pointer res = node_alloc_traits::allocate(*this, 1);
-            node_alloc_traits::construct(*this, res, std::forward<Args>(args)...);
+            value_node_pointer res = node_alloc_traits::allocate(this->get_node_alloc(), 1);
+            node_alloc_traits::construct(this->get_node_alloc(), res, std::forward<Args>(args)...);
             return res;
         }
 
@@ -38,8 +63,8 @@ namespace tl
         void
         put_node(value_node_pointer node) noexcept
         { 
-            node_alloc_traits::destroy(*this, node);
-            node_alloc_traits::deallocate(*this, node, 1);
+            node_alloc_traits::destroy(this->get_node_alloc(), node);
+            node_alloc_traits::deallocate(this->get_node_alloc(), node, 1);
         }
         
     };
@@ -61,7 +86,8 @@ namespace tl
     * as this is irrelevant for weak-trees.
     */
     template <typename NodeType,
-            typename Allocator>
+              typename Allocator>
+        requires is_weak_node<NodeType>
     struct weak_tree_base
     {
 
@@ -72,36 +98,20 @@ namespace tl
     * strong-trees and the iterative traversal this enables.
     */
     template <typename NodeType,
-            typename Allocator>
+              typename Allocator>
+        requires is_node<NodeType>
     struct tree_base
+        : public tree_allocator_base<NodeType, Allocator>
     {
-        using node_type    = NodeType;
-        using node_pointer = node_type*;
-        using hook_type    = typename node_type::hook_type;
+        using alloc_base = tree_allocator_base<NodeType, Allocator>;
+        using typename alloc_base::node_type;
+        using typename alloc_base::node_pointer;
+        using typename alloc_base::value_node_pointer;
+        using typename alloc_base::hook_type;
+        using typename alloc_base::value_type;
 
-        using allocator_type      = Allocator;
-        using alloc_traits        = std::allocator_traits<allocator_type>;
-        
-        using value_type          = typename alloc_traits::value_type; 
-        using value_node_type     = value_node<value_type, node_type>;
-        using value_node_pointer  = value_node_type*;
-
-        using node_allocator_type = alloc_traits::template rebind_alloc<value_node_type>;
-        using node_alloc_traits   = std::allocator_traits<node_allocator_type>;
-
-        using alloc_impl_type = tree_allocator_impl<allocator_type, node_allocator_type>;
-        
 
         tree_header_node m_header;
-        alloc_impl_type  m_alloc_impl;
-
-
-        [[nodiscard]]
-        constexpr
-        allocator_type
-        get_allocator() const noexcept 
-        { return allocator_type(this->m_alloc_impl); }
-
 
         template <hook_type H, typename... Args>
         value_node_pointer

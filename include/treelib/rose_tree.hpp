@@ -22,7 +22,7 @@ namespace tl
     };
 
     struct weak_rose_tree_node
-        : public node_base
+        : public weak_node_base
     {
         weak_rose_tree_node *m_first_child = nullptr;
         weak_rose_tree_node *m_next        = nullptr;
@@ -68,7 +68,7 @@ namespace tl
     };
 
     struct rose_tree_node
-        : public weak_rose_tree_node
+        : public node_base
     {
         rose_tree_node *m_last_child;
         rose_tree_node *m_prev;
@@ -78,14 +78,14 @@ namespace tl
 
 
     template <typename T, 
-            typename Allocator = std::allocator<T>>
+              typename Allocator = std::allocator<T>>
     class weak_rose_tree
-        : public tree_base<weak_rose_tree_node, Allocator>
+        : public weak_tree_base<weak_rose_tree_node, Allocator>
     { };
 
 
     template <typename T, 
-            typename Allocator = std::allocator<T>>
+              typename Allocator = std::allocator<T>>
     class rose_tree
         : public tree_base<rose_tree_node, Allocator>
     { };

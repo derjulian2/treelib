@@ -1,7 +1,7 @@
 
 cmake_minimum_required(VERSION 3.30.0)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 20 REQUIRED)
 
 project(treelib)
 
@@ -13,7 +13,7 @@ cmake_path(GET CMAKE_SOURCE_DIR PARENT_PATH treelib_DIR)
 
 set(BUILD_EXAMPLES ON)
 
-find_package(treelib REQUIRED GLOBAL)
+find_package(treelib REQUIRED)
 
 if (BUILD_EXAMPLES)
     add_subdirectory("examples")

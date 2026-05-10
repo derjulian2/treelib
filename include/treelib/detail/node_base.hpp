@@ -35,6 +35,18 @@ namespace tl
     struct node_base
     { };
 
+    /**
+     * interfaces throught which the
+     * structural information of each
+     * node-type is accessed.
+     */
+
+    template <typename NodeType>
+    struct node_traits;
+
+    template <typename NodeType>
+    struct weak_node_traits;
+
     /*
     * defines the shared node-interface that
     * a type that should be used as a node 
@@ -54,31 +66,27 @@ namespace tl
     *
     */
 
-
-    template <typename NodeType>
-    struct node_traits;
-
-
     template <typename T>
     concept is_weak_node = 
-        std::derived_from<T, node_base> 
+        std::derived_from<T, weak_node_base> 
         && std::default_initializable<T>
         && requires (T t)
         {
-            // { weak_node_traits<T>}
+            // { weak_node_traits<T>::hooks() } -> std::integral;
             true;
         };
 
 
     template <typename T>
     concept is_node = 
-        is_weak_node<T>
+        std::derived_from<T, node_base>
+        && std::default_initializable<T>
         && requires (T& tr, const T& ctr)
         {
-            typename node_traits<T>::hooks;
-            { node_traits<T>::parent(tr)  } -> std::convertible_to<T&>;
-            { node_traits<T>::parent(ctr) } -> std::convertible_to<const T&>;
-            { node_traits<T>::depth(tr)   } -> std::unsigned_integral;
+            // { node_traits<T>::parent(tr)  } -> std::convertible_to<T&>;
+            // { node_traits<T>::parent(ctr) } -> std::convertible_to<const T&>;
+            // { node_traits<T>::depth(tr)   } -> std::unsigned_integral;
+            true;
         };
 
 
@@ -88,7 +96,7 @@ namespace tl
     * makes the value accessible by reference.
     */
     template <typename ValueType,
-            typename NodeType>
+              typename NodeType>
         requires is_weak_node<NodeType> || is_node<NodeType>
     class value_node 
         : public NodeType
@@ -108,7 +116,7 @@ namespace tl
         value_node(Args&&... args)
             : m_value(std::forward<Args>(args)...)
         { }
-
+        
 
         [[nodiscard]]
         constexpr

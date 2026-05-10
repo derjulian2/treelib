@@ -32,6 +32,7 @@ namespace tl
     static_assert(sizeof(f64)  ==  64 / 8);
     static_assert(sizeof(f128) == 128 / 8);
 
+
     /**
      * @brief   folds the passed function over 
      *          every argument of the template-parameter-pack,
@@ -54,13 +55,15 @@ namespace tl
      *
      * @details i believe C++26 has 'template for (...)' which is something like this,
      *          but as a language feature.
-     *          also see this stack-overflow post, that taught me how
+     *          also see this stack-overflow post that taught me how
      *          to encode values with types using std::integral_constant:
      *          https://stackoverflow.com/questions/56937863/constexpr-lambda-argument
      */
     template <typename T, T... Args, typename Fn>
         requires (std::invocable<Fn, std::integral_constant<T, Args>> && ...)
-    void for_pack(Fn&& fn)
+    constexpr
+    void for_pack(Fn&& fn) 
+    noexcept((... && noexcept(fn(std::integral_constant<T, Args>()))))
     { (fn(std::integral_constant<T, Args>()), ...); }
 
 
@@ -71,7 +74,9 @@ namespace tl
      * @details (see tl::for_pack(...) for details)
      */
     template <typename T, T... Ints, typename Fn>
+    constexpr 
     void for_iseq(Fn&& fn, std::integer_sequence<T, Ints...>)
+    noexcept(noexcept(for_pack<T, Ints...>(fn)))
     { for_pack<T, Ints...>(fn); }
 
 
@@ -82,9 +87,12 @@ namespace tl
      * @details (see tl::for_pack(...) for details)
      */
     template <std::size_t N, typename Fn>
+    constexpr 
     void for_n(Fn&& fn)
+    noexcept(noexcept(for_iseq(fn, std::make_index_sequence<N>())))
     { for_iseq(fn, std::make_index_sequence<N>()); }
-}
 
+
+}
 
 #endif

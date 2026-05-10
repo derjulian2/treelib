@@ -15,7 +15,7 @@ namespace tl
 {
     template <std::size_t K>
     struct weak_k_tree_node 
-        : public node_base
+        : public weak_node_base
     {
         std::array<weak_k_tree_node*, K> m_children;
 
@@ -53,7 +53,6 @@ namespace tl
 
     template <std::size_t K>
     class k_tree_node
-        : public weak_k_tree_node<K>
     {
         k_tree_node *m_parent;
 
@@ -73,7 +72,7 @@ namespace tl
             std::size_t K,
             typename Allocator = std::allocator<T>>
     class weak_k_tree
-        : public tree_base<weak_k_tree_node<K>, Allocator>
+        : public weak_tree_base<weak_k_tree_node<K>, Allocator>
     { };
 
 }
