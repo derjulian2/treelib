@@ -11,6 +11,8 @@ option(BUILD_TESTS          "builds unit-tests for treelib"     OFF)
 
 cmake_path(GET CMAKE_SOURCE_DIR PARENT_PATH treelib_DIR)
 
+set(rangev3_INCLUDE_DIR "${treelib_DIR}/range-v3")
+
 set(BUILD_EXAMPLES ON)
 
 find_package(treelib REQUIRED)

@@ -24,6 +24,8 @@ namespace tl
     using u32 = uint32_t;
     using u64 = uint64_t;
 
+    using size = std::size_t;
+
     using f32  = float;
     using f64  = double;
     using f128 = long double;
@@ -86,13 +88,28 @@ namespace tl
      *          forcing the 'loop' to be unfolded at compile-time.
      * @details (see tl::for_pack(...) for details)
      */
-    template <std::size_t N, typename Fn>
+    template <size N, typename Fn>
     constexpr 
     void for_n(Fn&& fn)
     noexcept(noexcept(for_iseq(fn, std::make_index_sequence<N>())))
     { for_iseq(fn, std::make_index_sequence<N>()); }
 
 
+    /**
+     * @brief explicitly named dereference for use in filter/map. 
+     */
+    template <typename T>
+    constexpr
+    T& dereference(T* ptr) noexcept
+    { return *ptr; }
+
+    /**
+     * @brief explicitly named nullptr-check for use in filter/map.
+     */
+    template <typename T>
+    constexpr
+    bool is_null(T* ptr) noexcept
+    { return ptr == nullptr; }
 }
 
 #endif
