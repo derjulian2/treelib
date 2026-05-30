@@ -53,17 +53,27 @@ namespace tl
      */
 
     template <typename T>
-    concept in_node = requires (T &t) 
+    concept in_node = requires (T &a, T &b) 
     { 
         typename node_traits<T>::in_hook_type;
-
+        { node_traits<T>::template has_hook<std::declval<node_traits<T>::in_hook_type>()>(a) } -> std::convertible_to<bool>;
+        { node_traits<T>::template hook<std::declval<node_traits<T>::in_hook_type>()>(a) };
+        { node_traits<T>::template hook_as<std::declval<node_traits<T>::in_hook_type>()>(a, b) };
+        { node_traits<T>::for_in_hooks([](auto i) { }) };
         { node_traits<T>::parents() } -> ranges::range;
     };
 
     template <typename T>
-    concept out_node = requires (T &t) 
+    concept out_node = requires (T &a, T &b) 
     { 
         typename node_traits<T>::out_hook_type;
+        { 
+            node_traits<T>::for_in_hooks([&a](auto i) 
+            { node_traits<T>::template has_hook<i>(std::declval<T&>()); })
+        };
+        { node_traits<T>::template has_hook <std::declval<node_traits<T>::out_hook_type>()>(a) } -> std::convertible_to<bool>;
+        { node_traits<T>::template hook     <std::declval<node_traits<T>::out_hook_type>()>(a) };
+        { node_traits<T>::template hook_as  <std::declval<node_traits<T>::out_hook_type>()>(a, b) };
         { node_traits<T>::children() } -> ranges::range;
     };
 
@@ -183,22 +193,10 @@ namespace tl
     
 }
 
-#include <iostream>
 
 int main(int argc, char** argv) {
     using weak_node = tl::weak_k_tree_node<2>;
 
-    weak_node root { 0 };
-    weak_node l { 1};
-    weak_node ll { 2};
-    weak_node lr { 3 };
-
-    l.children    = { &ll, &lr };
-    root.children = { &l, nullptr };
-
-    for (const auto& i : tl::node_traits<weak_node>::total_children(root)) {
-        std::cout << i.i << std::endl;
-    }
 
     return 0;
 }
