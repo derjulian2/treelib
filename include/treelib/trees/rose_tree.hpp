@@ -2,6 +2,15 @@
 #ifndef TREELIB_ROSE_TREE_HPP
 #define TREELIB_ROSE_TREE_HPP
 
+/**
+ * @file   treelib/trees/rose_tree.hpp
+ * @author Julian Benzel
+ * @date   04.07.2026
+ *
+ * @brief  type-generic tree without any constraints
+ *         on the number of children per node.
+ */
+
 #include <treelib/detail/node_base.hpp>
 #include <treelib/detail/tree_base.hpp>
 
