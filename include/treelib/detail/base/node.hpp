@@ -3,26 +3,56 @@
 #define TREELIB_NODE_HPP
 
 /**
- * @file    treelib/detail/node.hpp
+ * @file    treelib/detail/base/node.hpp
  * @author  Julian Benzel
- * @date    03.07.2026
+ * @date    07.07.2026
  *
- * @brief   basic concepts and traits
- *          that every node-type should satisfy.
+ * @brief   requirements and traits
+ *          for node-types used in trees.
  *
  * @details a node consists of a value (attached via tl::value_node)
- *          and some sort of connection to another node, called
- *          a hook.
- *          how this connection is made is implementation-defined 
- *          by each node-type (the default-trees use mostly pointers).
- *         
- *          these connections are distinguished into two categories:
- *          - in-hooks:
- *            connections that lead towards the root of the tree.
- *          - out-hooks:
- *            connections that lead towards the leaves of the tree.
- *         
- *          this distinction raises the question of memory-ownership:
+ *          and some sort of connection to another node.
+ *          
+ *          a root-node is a node n without any connection
+ *          n <- m by any other node m.
+ *
+ *          a leaf-node is a node without any connection
+ *          n -> m to any other node m.
+ *
+ *          there are 4 different aspects to a connection between
+ *          two nodes of the same node-type:
+ *
+ *          1.) the 'low-level' implementation of said connection
+ *              (in the default-trees, mostly raw-pointers).
+ *
+ *          2.) the 'semantics' of a connection. trees are not very 
+ *              straightforward data-structures. naturally there are often
+ *              different ways in which it can make sense to insert
+ *              a node into a tree (e.g. for binary trees a node can be
+ *              inserted left or right).
+ *              this can be implemented using additional arguments
+ *              to tl::node_traits::hook_as<...>(n, ...).
+ *
+ *          3.) the 'kind' of connection that a function creates. this
+ *              implementation distinguishes functions that create
+ *              connections between nodes into 3 different categories:
+ *              - out-connections:
+ *                when f(n, m) creates a connection n -> m
+ *              - in-connections
+ *                when f(n, m) creates a connection n <- m
+ *              - mutual-connections
+ *                when f(n, m) creates a connection n <-> m
+ *              what kind of a connection a function creates is important
+ *              to classify trees into weak/strong to argue about their
+ *              properties of traversability and erasability.
+ *
+ *          4.) the 'direction' of a connection, which is either:
+ *              - outwards:
+ *                when n -> m faces 'away' from a root-node. 
+ *              - inwards:
+ *                when n -> m points 'away' from a leaf-node. 
+ *
+ *          this distinction also raises the question of memory-ownership:
  *          which connection of two nodes is 'stronger', as in that
  *          if the connection is severed, one of the two nodes should
  *          stay while the other and all of it's descendants should be removed.
@@ -34,7 +64,7 @@
  *          recursive erasure are provided for 
  *          node-types satisfying the in/out-node-concepts.
  *          
- *          node-types with both in- and out-hooks are called strong-nodes,
+ *          node-types where all connections are mutual are called strong-nodes,
  *          while nodes with only either one are called weak-nodes.
  *          naturally, weak-nodes are a subset of strong-nodes.
  *         
@@ -42,32 +72,57 @@
  *          way that from any node of the tree, there is always
  *          a sequence of references that one can traverse to get
  *          to any other node in the tree, making them iteratively-traversable.
+ *
+ *
+ *          for example:
+ *          consider a rose-tree-node that stores all of it's child-nodes
+ *          as a 'std::vector<node*> m_children'. it can make sense to define
+ *          the following enum to encode the possibilities of insertion:
+ *
+ *          enum struct rose_insert { as_first_child, as_last_child };
+ *
+ *          and a 'hook'-function as follows:
+ *
+ *          template <tl::edge_kind E>
+ *              requires (E == tl::edge_kind::out)
+ *          void hook_as(n, m, rose_insert how)
+ *          { ... }
+ *
+ *          additionally, you can leverage std::vector to provide
+ *          a mechanism to insert a node as the ith child via
+ *          another overload:
+ *
+ *          template <tl::edge_kind E>
+ *              requires (E == tl::edge_kind::out)
+ *          void hook_as(n, m, std::size_t i)
+ *          { n.m_children.insert(i, m); }
+ *
+ *          this construct enables specification of how a node should
+ *          be inserted at runtime (or maybe compile-time if the compiler
+ *          can inline .hook_as(n, m, rose_insert::first_child) if how is 
+ *          a compile-time-constant), while preserving the fact that .hook_as(...) 
+ *          will always only produce out-edges between nodes n and m, which will 
+ *          be useful in reasoning about the possible structures a tree can have and
+ *          which traversability-strategies may or may not apply to it.
+ *          
+ *          this however relies on the programmer to correctly identify that
+ *          his .hook_as(...) methods produce the exact edge-types
+ *          that it says it produces via the tl::edge_kind enum. otherwise
+ *          there will likely be some error in the traversing-algorithms later
+ *          (i didn't actually get to that yet, so we see how this actually plays out).
  */
-
-
-/*
-* e.g. for a binary-tree with .left, .right and .parent
-* this code will unfold into:
-* 
-* cpy = copy(node)
-* if (node.has_left):
-*    left_copy = recursive_copy(node.left)
-*    left_copy.hook_as<left>(cpy)
-*    cpy.hook_as<parent>(left_copy)
-* if (node.has_right):
-*    right_copy = recursive_copy(node.right)
-*    right_copy.hook_as<right>(cpy)
-*    cpy.hook_as<parent>(right_copy)
-*
-* which will hook all child-nodes and
-* parent-pointers correctly.
-*/
 
 #include <ranges>
 #include <concepts>
 
 namespace tl
 {
+    enum struct edge_kind
+    { out, in, mutual };
+
+    enum struct edge_direction
+    { outwards, inwards };
+
     /**
      * @brief interface that any node with
      *        hooks pointing away from a root-node
