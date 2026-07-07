@@ -19,7 +19,22 @@ namespace tl
               typename Allocator>
     struct avl_tree
         : protected weak_binary_tree<T, Allocator>
-    { };
+    {
+    private:
+
+        void rotate_right() 
+        {
+
+        }
+
+        void rotate_left()
+        {
+            
+        }
+
+    public:
+        
+    };
 }
 
 #endif

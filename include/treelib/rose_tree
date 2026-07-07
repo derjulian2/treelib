@@ -1,2 +1,2 @@
 
-#include <treelib/trees/rose_tree.hpp>
+#include <treelib/detail/trees/rose_tree.hpp>

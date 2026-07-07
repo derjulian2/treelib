@@ -1,2 +1,2 @@
 
-#include <treelib/trees/binary_tree.hpp>
+#include <treelib/detail/trees/binary_tree.hpp>

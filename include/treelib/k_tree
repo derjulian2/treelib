@@ -1,2 +1,2 @@
 
-#include <treelib/trees/k_tree.hpp>
+#include <treelib/detail/trees/k_tree.hpp>

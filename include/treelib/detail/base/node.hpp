@@ -80,8 +80,66 @@ namespace tl
         // { t.has_hook(std::declval<typename T::out_hook_type>()) } -> std::convertible_to<bool>;
         // { t.hook(std::declval<typename T::out_hook_type>()) };
         { t.hook_as(std::declval<typename T::out_hook_type>(), t) };
+        { t.neighbours() } -> std::ranges::range;
         // { t.children() } -> std::ranges::range;
     };
+
+    /**
+     * @brief compile-time-requirement for out-nodes:
+     *        if a connection between two nodes a, b is established
+     *        via a.hook_as(<sth>, b) then a.neighbours() must contain b.
+     */
+    template <typename T>
+    constexpr bool
+    out_node_neighbours_req() 
+    {
+        using node_type = T;
+
+        node_type x, y;
+
+        x.hook_as();
+
+        for (const auto& n : x.neighbours())
+        {
+            if (n == y)
+            { }
+        }
+        return false;
+    }
+
+    /**
+     * @brief compile-time-requirement for in-nodes:
+     *        if a connection between two nodes a, b is established
+     *        via a.hook_as(<sth>, b) then b.neighbours() must contain a.
+     */
+    template <typename T>
+    constexpr bool
+    in_node_neighbours_req() 
+    {
+        using node_type = T;
+
+        node_type x, y;
+
+        x.hook_as();
+
+        for (const auto& n : x.neighbours())
+        {
+            if (n == y)
+            { }
+        }
+        return false;
+    }
+
+    /**
+     * @brief compile-time-requirement for full-nodes:
+     *        if a connection between two nodes a, b is established
+     *        via a.hook_as(<sth>, b) then a.neighbours() must contain b
+     *        and b.neighbours().
+     */
+    template <typename T>
+    constexpr bool
+    full_node_neighbours_req() 
+    { return out_node_neighbours_req<T>() && in_node_neighbours_req<T>(); }
 
 
     /**

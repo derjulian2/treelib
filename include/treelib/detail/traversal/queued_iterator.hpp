@@ -15,48 +15,20 @@
  *         parents are not reachable from any given node).
  */
 
-#include <treelib/detail/node.hpp>
+#include <queue>
+#include <stack>
+#include <vector>
 
 namespace tl
 {
-    template <typename ValueType, typename NodeType>
-        requires node<NodeType>
-    class queued_depth_first_pre_order_iterator
-    {
-
-    };
-
-    template <typename ValueType, typename NodeType>
-        requires node<NodeType>
-    class queued_depth_first_in_order_iterator
-    {
-
-    };
-
-    template <typename ValueType, typename NodeType>
-        requires node<NodeType>
-    class queued_depth_first_post_order_iterator
-    {
-
-    };
+    
 
 
-    template <typename ValueType, typename NodeType>
-        requires node<NodeType>
-    class queued_breadth_first_in_order_iterator
-    {
-
-    };
-
-    template <typename ValueType, typename NodeType>
-        requires node<NodeType>
-    class queued_breadth_first_reverse_order_iterator
-    {
-
-    };
 
 
-    template <typename ValueType, typename NodeType>
+    template <typename ValueType, 
+              typename NodeType, 
+              typename TraversalType>
         requires node<NodeType>
     class queued_iterator
     {

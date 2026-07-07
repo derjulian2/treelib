@@ -1,2 +1,2 @@
 
-#include <treelib/trees/avl_tree.hpp>
+#include <treelib/detail/trees/avl_tree.hpp>

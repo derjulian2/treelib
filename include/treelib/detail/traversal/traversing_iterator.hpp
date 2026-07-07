@@ -19,42 +19,6 @@
 
 namespace tl
 {
-    template <typename ValueType, typename NodeType>
-        requires strong_node<NodeType>
-    class traversing_depth_first_pre_order_iterator
-    {
-
-    };
-
-    template <typename ValueType, typename NodeType>
-        requires strong_node<NodeType>
-    class traversing_depth_first_in_order_iterator
-    {
-
-    };
-
-    template <typename ValueType, typename NodeType>
-        requires strong_node<NodeType>
-    class traversing_depth_first_post_order_iterator
-    {
-
-    };
-
-
-    template <typename ValueType, typename NodeType>
-        requires node<NodeType>
-    class traversing_breadth_first_in_order_iterator
-    {
-
-    };
-
-    template <typename ValueType, typename NodeType>
-        requires strong_node<NodeType>
-    class traversing_breadth_first_reverse_order_iterator
-    {
-
-    };
-
 
     template <typename ValueType, typename NodeType>
         requires strong_node<NodeType>
