@@ -38,21 +38,23 @@ namespace tl
          *        that when iterated over represents the
          *        depth-first-pre-order traversal of the underlying tree.
          */
-        template <typename ResultType = std::vector<node_pointer>>
+        template <typename ResultType = std::deque<node_pointer>>
         static constexpr 
         ResultType
         enqueue(node_pointer src)
         {
             ResultType result;
-            std::stack<node_pointer> stack { src };
+            std::stack<node_pointer> stack;
+            
+            stack.push(src);
             while (!stack.empty())
             {
                 node_pointer cur = stack.top();
+                result.push_back(cur);
                 stack.pop();
 
                 for (node_pointer& c : node_traits::children(*cur))
                 {
-                    result.push_back(c);
                     stack.push(c);
                 }
             }
@@ -60,22 +62,22 @@ namespace tl
         }
 
 
-        constexpr 
-        node_pointer
-        next(node_pointer src)
-            requires strong_node<node_type>
-        {
+        // constexpr 
+        // node_pointer
+        // next(node_pointer src)
+        //     requires strong_node<node_type>
+        // {
 
-        }
+        // }
 
 
-        constexpr 
-        node_pointer
-        prev(node_pointer src)
-            requires strong_node<node_type>
-        {
+        // constexpr 
+        // node_pointer
+        // prev(node_pointer src)
+        //     requires strong_node<node_type>
+        // {
 
-        }
+        // }
     };
 
 

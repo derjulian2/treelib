@@ -117,12 +117,6 @@
 
 namespace tl
 {
-    enum struct edge_kind
-    { out, in, mutual };
-
-    enum struct edge_direction
-    { outwards, inwards };
-
     /**
      * @brief interface that any node with
      *        hooks pointing away from a root-node
@@ -132,69 +126,10 @@ namespace tl
     concept out_node = requires(T& t, const T& ct)
     {
         typename T::out_hook_type;
-        // { t.has_hook(std::declval<typename T::out_hook_type>()) } -> std::convertible_to<bool>;
-        // { t.hook(std::declval<typename T::out_hook_type>()) };
+        { t.at_hook(std::declval<typename T::out_hook_type>()) } -> std::convertible_to<T*>;
         { t.hook_as(std::declval<typename T::out_hook_type>(), t) };
-        { t.neighbours() } -> std::ranges::range;
-        // { t.children() } -> std::ranges::range;
+        { t.children() } -> std::ranges::range;
     };
-
-    /**
-     * @brief compile-time-requirement for out-nodes:
-     *        if a connection between two nodes a, b is established
-     *        via a.hook_as(<sth>, b) then a.neighbours() must contain b.
-     */
-    template <typename T>
-    constexpr bool
-    out_node_neighbours_req() 
-    {
-        using node_type = T;
-
-        node_type x, y;
-
-        x.hook_as();
-
-        for (const auto& n : x.neighbours())
-        {
-            if (n == y)
-            { }
-        }
-        return false;
-    }
-
-    /**
-     * @brief compile-time-requirement for in-nodes:
-     *        if a connection between two nodes a, b is established
-     *        via a.hook_as(<sth>, b) then b.neighbours() must contain a.
-     */
-    template <typename T>
-    constexpr bool
-    in_node_neighbours_req() 
-    {
-        using node_type = T;
-
-        node_type x, y;
-
-        x.hook_as();
-
-        for (const auto& n : x.neighbours())
-        {
-            if (n == y)
-            { }
-        }
-        return false;
-    }
-
-    /**
-     * @brief compile-time-requirement for full-nodes:
-     *        if a connection between two nodes a, b is established
-     *        via a.hook_as(<sth>, b) then a.neighbours() must contain b
-     *        and b.neighbours().
-     */
-    template <typename T>
-    constexpr bool
-    full_node_neighbours_req() 
-    { return out_node_neighbours_req<T>() && in_node_neighbours_req<T>(); }
 
 
     /**
@@ -206,8 +141,6 @@ namespace tl
     concept in_node = requires(T t, const T ct)
     {
         typename T::in_hook_type;
-        { t.has_hook(std::declval<typename T::in_hook_type>()) } -> std::convertible_to<bool>;
-        { t.hook(std::declval<typename T::in_hook_type>()) };
         { t.hook_as(std::declval<typename T::in_hook_type>(), t) };
         { t.parents() } -> std::ranges::range;
     };
@@ -225,8 +158,9 @@ namespace tl
     concept weak_node = out_node<T> != in_node<T>; /* XOR */
 
     template <typename T>
-    concept strong_node = out_node<T> && in_node<T> && requires(T& t, const T& ct)
-    { { t.unhook() } -> std::same_as<void>; };
+    concept strong_node = out_node<T> && in_node<T> 
+        && requires(T& t, const T& ct)
+        { { t.unhook() } -> std::same_as<void>; };
 
     template <typename T, typename NodeType>
     concept is_hook_type =  (out_node<NodeType> && std::convertible_to<T, typename NodeType::out_hook_type>)
@@ -248,8 +182,16 @@ namespace tl
 
 
         static constexpr
+        pointer at_hook(reference node, out_hook_type what)
+        { return node.at_hook(what); }
+
+        static constexpr
         void hook_as(reference node, out_hook_type what, reference where)
         { node.hook_as(what, where); }
+
+        static constexpr
+        auto children(reference node)
+        { return node.children(); }
     };
 
 

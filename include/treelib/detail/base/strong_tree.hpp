@@ -12,9 +12,9 @@
  *         (e.g. root/leaf).
  */
 
-#include <treelib/detail/node.hpp>
-#include <treelib/detail/tree_alloc.hpp>
-#include <treelib/detail/queued_iterator.hpp>
+#include <treelib/detail/base/node.hpp>
+#include <treelib/detail/base/tree_alloc.hpp>
+#include <treelib/detail/traversal/queued_iterator.hpp>
 
 #define TREELIB_TRACK_TREE_SIZE
 

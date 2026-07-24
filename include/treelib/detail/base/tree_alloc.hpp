@@ -3,7 +3,7 @@
 #define TREELIB_TREE_ALLOC_HPP
 
 /**
- * @file   treelib/detail/tree_alloc.hpp
+ * @file   treelib/detail/base/tree_alloc.hpp
  * @author Julian Benzel
  * @date   03.07.2026
  *
@@ -12,10 +12,12 @@
  */
 
 #include <memory>
-#include <treelib/detail/node.hpp>
+#include <treelib/detail/base/node.hpp>
+
 
 namespace tl
 {
+
     template <typename NodeType,
               typename Allocator>
     struct tree_allocator_base
@@ -65,6 +67,7 @@ namespace tl
             return res;
         }
 
+        
         constexpr
         void
         put_node(value_node_pointer node) noexcept
