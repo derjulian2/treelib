@@ -12,14 +12,11 @@
 
 #include <treelib/detail/bits/except.hpp>
 #include <treelib/detail/base/node.hpp>
-#include <treelib/detail/base/strong_tree.hpp>
-#include <treelib/detail/base/weak_tree.hpp>
+#include <treelib/detail/base/tree.hpp>
+#include <treelib/detail/base/forest.hpp>
 
 #include <memory>
-#include <concepts>
-#include <utility>
 #include <array>
-#include <tuple>
 #include <cassert>
 #include <ranges>
 
@@ -33,20 +30,20 @@ namespace tl
     {
 
         template <std::size_t K>
-        struct weak_k_tree_node
+        struct k_node
         {
-            std::array<weak_k_tree_node*, K> m_children;
+            std::array<k_node*, K> m_children;
 
             using out_hook_type = std::size_t;
 
             
-            constexpr weak_k_tree_node*
+            constexpr k_node*
             at_hook(out_hook_type what)
             { return this->m_children.at(what); }
 
 
             constexpr void
-            hook_as(out_hook_type what, weak_k_tree_node& where)
+            hook_as(out_hook_type what, k_node& where)
             {
             #ifdef TREELIB_WEAK_K_TREE_NO_SHIFT
                 #ifdef TREELIB_NO_EXCEPTIONS
@@ -67,10 +64,26 @@ namespace tl
 
 
             constexpr auto
-            children()
+            out_neighbours()
             {
                 return this->m_children
-                       | std::views::filter([](weak_k_tree_node* x) { return x != nullptr; });
+                       | std::views::filter([](k_node* x) { return x != nullptr; });
+            }
+
+            template <typename Fn>
+                requires node_copy_invocable<Fn, weak_k_tree_node>
+            weak_k_tree_node* clone(Fn&& copy)
+                const
+            {
+                weak_k_tree_node* tmp = copy(this);
+                for (std::size_t i = 0; i < K; ++i)
+                { 
+                    if (this->m_children[i] != nullptr)
+                    { 
+                        tmp->m_children[i] = this->m_children[i]->clone(std::forward<Fn>(copy)); 
+                    }
+                }
+                return tmp;
             }
         };
 
@@ -84,25 +97,24 @@ namespace tl
 
     
     template <typename T, 
-            std::size_t K,
-            typename Allocator = std::allocator<T>>
-    class strong_k_tree
-        : public strong_tree_base<detail::strong_k_tree_node<K>, Allocator>
-    { };
+              std::size_t K,
+              typename Allocator = std::allocator<T>>
+    class outward_k_tree
+        : public detail::outward_tree_base<detail::k_node<K>, Allocator>
+    { 
+
+    };
 
 
     template <typename T, 
-            std::size_t K,
-            typename Allocator = std::allocator<T>>
-    class weak_k_tree
-        : public weak_tree_base<detail::weak_k_tree_node<K>, Allocator>
-    { };
+              std::size_t K,
+              typename Allocator = std::allocator<T>>
+    class k_tree
+        : public detail::tree_base<detail::k_node<K>, Allocator>
+    { 
 
+    };
 
-    template <typename T, 
-            std::size_t K,
-            typename Allocator = std::allocator<T>>
-    using k_tree = weak_k_tree<T, K, Allocator>;
 }
 
 #endif

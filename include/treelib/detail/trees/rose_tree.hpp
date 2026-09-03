@@ -11,23 +11,31 @@
  *         on the number of children per node.
  */
 
-#include <treelib/detail/node_base.hpp>
-#include <treelib/detail/tree_base.hpp>
+
 
 #include <vector>
 #include <utility>
 
 namespace tl
 {
-    struct weak_vecrose_tree_node
+    namespace detail
     {
-        std::vector<weak_vecrose_tree_node*> m_children;
+        template <typename T>
+        struct vecrose_node_base
+        {
+            std::vector<T*> 
+        };
+    }
+
+    struct weak_vecrose_node
+    {
+        std::vector<weak_vecrose_node*> m_children;
     };
 
-    struct vecrose_tree_node
+    struct vecrose_node
     {
-        vecrose_tree_node               *m_parent;
-        std::vector<vecrose_tree_node*>  m_children;
+        vecrose_node               *m_parent;
+        std::vector<vecrose_node*>  m_children;
     };
 
     struct weak_rose_tree_node
@@ -88,16 +96,33 @@ namespace tl
 
     template <typename T, 
               typename Allocator = std::allocator<T>>
-    class weak_rose_tree
+    class weak_vecrose_tree
         : public weak_tree_base<weak_rose_tree_node, Allocator>
     { };
 
 
     template <typename T, 
               typename Allocator = std::allocator<T>>
-    class rose_tree
+    class vecrose_tree
         : public tree_base<rose_tree_node, Allocator>
     { };
+
+        template <typename T, 
+              typename Allocator = std::allocator<T>>
+    class weak_listrose_tree
+        : public weak_tree_base<weak_rose_tree_node, Allocator>
+    { };
+
+
+    template <typename T, 
+              typename Allocator = std::allocator<T>>
+    class listrose_tree
+        : public tree_base<rose_tree_node, Allocator>
+    { };
+
+    template <typename T,
+              typename Allocator = std::allocator<T>>
+    using rose_tree = listrose_tree<T, Allocator>;
 }
 
 

@@ -1,327 +1,205 @@
 
-#ifndef TREELIB_NODE_HPP
-#define TREELIB_NODE_HPP
+#ifndef TREELIB_BASE_NODE_HPP
+#define TREELIB_BASE_NODE_HPP
 
-/**
- * @file    treelib/detail/base/node.hpp
- * @author  Julian Benzel
- * @date    07.07.2026
- *
- * @brief   requirements and traits
- *          for node-types used in trees.
- *
- * @details a node consists of a value (attached via tl::value_node)
- *          and some sort of connection to another node.
- *          
- *          a root-node is a node n without any connection
- *          n <- m by any other node m.
- *
- *          a leaf-node is a node without any connection
- *          n -> m to any other node m.
- *
- *          there are 4 different aspects to a connection between
- *          two nodes of the same node-type:
- *
- *          1.) the 'low-level' implementation of said connection
- *              (in the default-trees, mostly raw-pointers).
- *
- *          2.) the 'semantics' of a connection. trees are not very 
- *              straightforward data-structures. naturally there are often
- *              different ways in which it can make sense to insert
- *              a node into a tree (e.g. for binary trees a node can be
- *              inserted left or right).
- *              this can be implemented using additional arguments
- *              to tl::node_traits::hook_as<...>(n, ...).
- *
- *          3.) the 'kind' of connection that a function creates. this
- *              implementation distinguishes functions that create
- *              connections between nodes into 3 different categories:
- *              - out-connections:
- *                when f(n, m) creates a connection n -> m
- *              - in-connections
- *                when f(n, m) creates a connection n <- m
- *              - mutual-connections
- *                when f(n, m) creates a connection n <-> m
- *              what kind of a connection a function creates is important
- *              to classify trees into weak/strong to argue about their
- *              properties of traversability and erasability.
- *
- *          4.) the 'direction' of a connection, which is either:
- *              - outwards:
- *                when n -> m faces 'away' from a root-node. 
- *              - inwards:
- *                when n -> m points 'away' from a leaf-node. 
- *
- *          this distinction also raises the question of memory-ownership:
- *          which connection of two nodes is 'stronger', as in that
- *          if the connection is severed, one of the two nodes should
- *          stay while the other and all of it's descendants should be removed.
- *         
- *          this is handled by each tree-type in of itself, as the
- *          use case changes semantics (in-trees should probably keep
- *          nodes alive that are connected via in-hooks, not the other
- *          way round), but appropriate methods to implement
- *          recursive erasure are provided for 
- *          node-types satisfying the in/out-node-concepts.
- *          
- *          node-types where all connections are mutual are called strong-nodes,
- *          while nodes with only either one are called weak-nodes.
- *          naturally, weak-nodes are a subset of strong-nodes.
- *         
- *          the trees built by strong-nodes are connected in such a
- *          way that from any node of the tree, there is always
- *          a sequence of references that one can traverse to get
- *          to any other node in the tree, making them iteratively-traversable.
- *
- *
- *          for example:
- *          consider a rose-tree-node that stores all of it's child-nodes
- *          as a 'std::vector<node*> m_children'. it can make sense to define
- *          the following enum to encode the possibilities of insertion:
- *
- *          enum struct rose_insert { as_first_child, as_last_child };
- *
- *          and a 'hook'-function as follows:
- *
- *          template <tl::edge_kind E>
- *              requires (E == tl::edge_kind::out)
- *          void hook_as(n, m, rose_insert how)
- *          { ... }
- *
- *          additionally, you can leverage std::vector to provide
- *          a mechanism to insert a node as the ith child via
- *          another overload:
- *
- *          template <tl::edge_kind E>
- *              requires (E == tl::edge_kind::out)
- *          void hook_as(n, m, std::size_t i)
- *          { n.m_children.insert(i, m); }
- *
- *          this construct enables specification of how a node should
- *          be inserted at runtime (or maybe compile-time if the compiler
- *          can inline .hook_as(n, m, rose_insert::first_child) if how is 
- *          a compile-time-constant), while preserving the fact that .hook_as(...) 
- *          will always only produce out-edges between nodes n and m, which will 
- *          be useful in reasoning about the possible structures a tree can have and
- *          which traversability-strategies may or may not apply to it.
- *          
- *          this however relies on the programmer to correctly identify that
- *          his .hook_as(...) methods produce the exact edge-types
- *          that it says it produces via the tl::edge_kind enum. otherwise
- *          there will likely be some error in the traversing-algorithms later
- *          (i didn't actually get to that yet, so we see how this actually plays out).
- */
+ /***************************************************
+  * @file   treelib/detail/base/node.hpp
+  * @author Julian Benzel
+  * @date   03.09.2026
+  *
+  * @brief   requirements and traits
+  *          for node-types used in trees.
+  ***************************************************/
 
 #include <ranges>
 #include <concepts>
 
 namespace tl
 {
-    /**
-     * @brief interface that any node with
-     *        hooks pointing away from a root-node
-     *        should implement.
-     */
-    template <typename T>
-    concept out_node = requires(T& t, const T& ct)
+    namespace detail
     {
-        typename T::out_hook_type;
-        { t.at_hook(std::declval<typename T::out_hook_type>()) } -> std::convertible_to<T*>;
-        { t.hook_as(std::declval<typename T::out_hook_type>(), t) };
-        { t.children() } -> std::ranges::range;
-    };
+        /*****************************************************************************************************
+         * @brief   requirements of a node-type to
+         *          be used in a tree-container.
+         *
+         * @details nodes consist of recursion-points
+         *          that somehow reference the root-node of
+         *          a subtree (e.g. .left/.right in a binary-tree).
+         *          
+         *          these recursion-points are owning references, meaning
+         *          the lifetime of a node that is referenced by a recursion-point 
+         *          of another node will be dependent on the lifetime of the parent-node.
+         *
+         *          example. consider the following node-specification:
+         *
+         *          BTree ::= BNil | BNode x (BTree) (BTree)
+         *
+         *          which could be implemented by the following structure:
+         *
+         *          struct bnode {
+         *              bnode *left;
+         *              bnode *right;
+         *          };
+         *
+         *          when trying to erase a node, there would be a 'hole' in the
+         *          parent's recursion-point for that node, and there would not be a way
+         *          to securely delete a node without some '.parent'-back-reference, which
+         *          seperates nodes like these from these in it's capabilities.
+         *****************************************************************************************************/
+        template <typename T>
+        concept node
+            = requires (T t, const T ct)
+            {
+                typename T::hook_type;
+                { t.children() }
+                    -> std::ranges::range;
+                { ct.children() }
+                    -> std::ranges::range;
+                { t.hook_as(std::declval<typename T::hook_type>(), std::addressof(t)) };
+                { t.clone() }
+                    -> std::same_as<T*>;
+                { t.erase_at(std::declval<typename T::hook_type>()) }
+                    -> std::convertible_to<std::size_t>;
+            };
 
 
-    /**
-     * @brief interface that any node with
-     *        hooks pointing towards a root-node
-     *        should implement.
-     */
-    template <typename T>
-    concept in_node = requires(T t, const T ct)
-    {
-        typename T::in_hook_type;
-        { t.hook_as(std::declval<typename T::in_hook_type>(), t) };
-        { t.parents() } -> std::ranges::range;
-    };
-
-
-    /**
-     * @brief additional named-requirements
-     *        based on in/out-node.
-     */
-
-    template <typename T>
-    concept node = out_node<T> || in_node<T>;
-
-    template <typename T>
-    concept weak_node = out_node<T> != in_node<T>; /* XOR */
-
-    template <typename T>
-    concept strong_node = out_node<T> && in_node<T> 
-        && requires(T& t, const T& ct)
-        { { t.unhook() } -> std::same_as<void>; };
-
-    template <typename T, typename NodeType>
-    concept is_hook_type =  (out_node<NodeType> && std::convertible_to<T, typename NodeType::out_hook_type>)
-                         || (in_node<NodeType> && std::convertible_to<T, typename NodeType::in_hook_type>);
-
-
-    /**
-     * @brief traits to make out_node<T> requirements accessible.
-     */
-    template <typename T>
-        requires out_node<T>
-    struct out_node_traits
-    {
-        using node_type = T;
-        using pointer   = node_type*;
-        using reference = node_type&;
-
-        using out_hook_type = typename node_type::out_hook_type;
-
-
-        static constexpr
-        pointer at_hook(reference node, out_hook_type what)
-        { return node.at_hook(what); }
-
-        static constexpr
-        void hook_as(reference node, out_hook_type what, reference where)
-        { node.hook_as(what, where); }
-
-        static constexpr
-        auto children(reference node)
-        { return node.children(); }
-    };
-
-
-    /**
-     * @brief traits to make in_node<T> requirements accessible.
-     */
-    template <typename T>
-        requires in_node<T>
-    struct in_node_traits
-    {
-        using node_type = T;
-        using pointer   = node_type*;
-        using reference = node_type&;
-
-        using in_hook_type = typename node_type::in_hook_type;
-
+        /***************************************************
+         * @brief template-mixin that extends the
+         *        passed node-type by an instance of
+         *        value-type.
+         ***************************************************/
+        template <typename NodeType, typename ValueType>
+            requires node<NodeType>
+        class value_node
+            : public NodeType
+        {
+        public:
+            
+            using value_type      = ValueType;
+            using reference       = value_type&;
+            using const_reference = const value_type&;
+            using pointer         = value_type*;
+            using const_pointer   = const value_type*;
         
-        static constexpr
-        void hook_as(reference node, in_hook_type what, reference where)
-        { node.hook_as(what, where); }
-    };
+        protected:
+            
+            value_type _M_value;
+
+        public:
+
+            template <typename... Args>
+            constexpr
+            value_node(Args&&... args)
+                noexcept(std::is_nothrow_constructible_v<value_type, Args...>)
+                : _M_value(std::forward<Args>(args)...)
+            { }
+
+            [[nodiscard]]
+            constexpr reference
+            value()
+                noexcept
+            { return this->_M_value; }
+
+            [[nodiscard]]
+            constexpr const_reference
+            value()
+                const noexcept
+            { return this->_M_value; }
+        };
 
 
-    /**
-     * @brief traits to make strong_node<T> requirements accessible.
-     */
-    template <typename T>
-        requires strong_node<T>
-    struct strong_node_traits
-        : public out_node_traits<T>
-        , public in_node_traits<T>
-    {
-        using reference = typename out_node_traits<T>::reference;
+        /***************************************************
+         * @brief additional functionality and common
+         *        interface for every type satisying the
+         *        requirements for a tree-node.
+         ***************************************************/
+        template <typename NodeType>
+            requires node<NodeType>
+        struct node_traits
+        {
+            using node_type            = NodeType;
+            using node_pointer         = node_type*;
+            using const_node_pointer   = const node_type*;
+            using node_reference       = node_type&;
+            using const_node_reference = const node_type&;
 
-        static constexpr
-        void unhook(reference node)
-        { node.unhook(); }
-    };
+            using typename node_type::hook_type;
 
+            static constexpr void
+            hook_as(node_reference node, hook_type as, node_reference parent)
+            {
+                node.hook_as(as, parent);
+            }
 
-    /**
-     * @brief unified interface for weak/strong-nodes,
-     *        selected based on concept-requirements.
-     */
-    template <typename T>
-    struct node_traits;
+            static constexpr decltype(auto)
+            children(node_reference node)
+            { 
+                return node.children(); 
+            }
 
-
-    template <typename T>
-        requires (out_node<T> && weak_node<T>)
-    struct node_traits<T>
-        : public out_node_traits<T>
-    { };
-
-
-    template <typename T>
-        requires (in_node<T> && weak_node<T>)
-    struct node_traits<T>
-        : public in_node_traits<T>
-    { };
+            static constexpr bool
+            is_leaf(const_node_reference node)
+            { 
+                return std::ranges::empty(node.children());
+            }
+        };
 
 
-    template <typename T>
-        requires strong_node<T>
-    struct node_traits<T>
-        : public strong_node_traits<T>
-    { };
+        /***************************************************
+         * @brief template-mixin that extends the
+         *        passed node-type by an additional
+         *        back-pointer to it's owning parent.
+         ***************************************************/
+        template <typename NodeType>
+            requires node<NodeType>
+        struct bidirectional_node
+            : public NodeType
+        {
+            using node_type            = NodeType;
+            using node_pointer         = node_type*;
+            using const_node_pointer   = const node_type*;
+            using node_reference       = node_type&;
+            using const_node_reference = const node_type&;
+
+            using typename node_type::hook_type;
+
+            node_pointer _M_parent;
+
+            constexpr void
+            _M_reset()
+            { this->_M_parent = nullptr; } 
+
+            constexpr
+            bidirectional_node()
+                : _M_parent(nullptr)
+            { }
+                
+            constexpr node_pointer
+            parent() 
+                noexcept
+            { return this->_M_parent; }
 
 
-    /**
-     * @brief empty base-class for node-types
-     *        used inside of trees. will cause some 
-     *        static-casting later on, but this
-     *        basically enables the sentinel-node
-     *        in strong trees to be treated as
-     *        a regular node without actually
-     *        having all the members of an actual
-     *        node (so just to save some memory).
-     */
-    struct node_base { };
+            constexpr const_node_pointer
+            parent()
+                const noexcept
+            { return this->_M_parent; }
 
 
-    /**
-     * @brief extends the passed node-type
-     *        by an instance of value-type 
-     *        using CRTP. 
-     *       
-     *        these will be the actual node-types
-     *        allocated by the respective tree-types.
-     */
-    template <typename ValueType,
-              typename NodeType>
-        requires node<NodeType>
-    class value_node
-        : public NodeType
-        , public node_base
-    {
-    public:
-
-        using value_type = ValueType;
-        using node_type  = NodeType;
-
-    private:
-
-        value_type m_value;
-
-    public:
-
-        template <typename... Args>
-        value_node(Args&&... args)
-            : m_value(std::forward<Args>(args)...)
-        { }
-        
-
-        [[nodiscard]]
-        constexpr
-        value_type&
-        value() noexcept
-        { return m_value; }
+            constexpr bool
+            is_root()
+                const noexcept
+            { return this->_M_parent == nullptr; }
 
 
-        [[nodiscard]]
-        constexpr
-        const value_type&
-        value() const noexcept
-        { return m_value; }
-
-    };
-
-    
+            constexpr void
+            hook_as(hook_type as, node_pointer where)
+            {
+                this->node_type::hook_as(std::forward<hook_type>(as), std::forward<node_pointer>(where));
+                this->_M_parent = where;
+            }
+        };
+    }
 }
 
 #endif

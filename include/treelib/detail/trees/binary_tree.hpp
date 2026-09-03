@@ -15,18 +15,15 @@
 namespace tl 
 {
     template <typename T, typename Allocator = std::allocator<T>>
-    struct strong_binary_tree
-        : public strong_k_tree<T, 2, Allocator>
+    struct outward_binary_tree
+        : public outward_k_tree<T, 2, Allocator>
     { };
 
     template <typename T, typename Allocator = std::allocator<T>>
-    struct weak_binary_tree
-        : public weak_k_tree<T, 2, Allocator>
+    struct binary_tree
+        : public k_tree<T, 2, Allocator>
     { };
 
-    template <typename T,
-              typename Allocator = std::allocator<T>>
-    using binary_tree = weak_binary_tree<T, Allocator>;
 } 
 
 #endif
