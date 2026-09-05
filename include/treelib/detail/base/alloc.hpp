@@ -23,22 +23,25 @@ namespace tl
          * @brief base-class that handles low-level-
          *        memory-management of tree-nodes.
          ***************************************************/
-        template <typename NodeType,
-                  typename Allocator>
-        class tree_allocator_base
+        template <typename _NodeT,
+                  typename _AllocT>
+        class _Tree_Alloc_Base
         {
         protected:
 
-            using _M_alloc_t        = Allocator;
+            using _M_alloc_t        = _AllocT;
             using _M_alloc_traits_t = std::allocator_traits<_M_alloc_t>;
             using _M_value_t        = typename _M_alloc_traits_t::value_type;
             using _M_size_t         = typename _M_alloc_traits_t::size_type;
 
-            using _M_node_t     = NodeType;
-            using _M_node_ptr_t = _M_node_t*;
+            using _M_node_t        = _NodeT;
+            using _M_node_traits_t = _Node_Traits<_M_node_t>;
+            using _M_node_ptr_t    = typename _M_node_traits_t::_M_ptr_t;
+            using _M_cnode_ptr_t   = typename _M_node_traits_t::_M_cptr_t;
             
-            using _M_vnode_t     = value_node<_M_value_t, _M_node_t>;
-            using _M_vnode_ptr_t = _M_vnode_t*;
+            using _M_vnode_t       = _Value_Node<_M_node_t, _M_value_t>;
+            using _M_vnode_ptr_t   = _M_vnode_t*;
+            using _M_cvnode_ptr_t  = const _M_vnode_t*;
 
             using _M_node_alloc_t        = _M_alloc_traits_t::template rebind_alloc<_M_vnode_t>;
             using _M_node_alloc_traits_t = std::allocator_traits<_M_node_alloc_t>;
@@ -47,6 +50,10 @@ namespace tl
             _M_node_alloc_t _M_alloc;
 
         protected:
+
+            /***************************************************
+             * @brief accessors to allocator-instance.
+             ***************************************************/
 
             constexpr _M_node_alloc_t& 
             _M_get_node_alloc() 
@@ -67,45 +74,22 @@ namespace tl
             template <typename... Args>
             [[nodiscard]]
             constexpr _M_vnode_ptr_t 
-            _M_new_node(Args&&... args)
+            _M_new_node(Args&&... _args)
             { 
-                _M_vnode_ptr_t res = _M_node_alloc_traits_t::allocate(this->_M_get_node_alloc(), 1);
-                _M_node_alloc_traits_t::construct(this->_M_get_node_alloc(), res, std::forward<Args>(args)...);
-                return res;
+                _M_vnode_ptr_t _res = _M_node_alloc_traits_t::allocate(this->_M_get_node_alloc(), 1);
+                _M_node_alloc_traits_t::construct(this->_M_get_node_alloc(), _res, std::forward<Args>(_args)...);
+                return _res;
             }
-
 
             /***************************************************
              * @brief destructs and deallocates a node-instance.
              ***************************************************/
             constexpr void 
-            _M_put_node(_M_vnode_ptr_t node) 
+            _M_put_node(_M_vnode_ptr_t _node) 
                 noexcept
             { 
-                _M_node_alloc_traits_t::destroy(this->_M_get_node_alloc(), node);
-                _M_node_alloc_traits_t::deallocate(this->_M_get_node_alloc(), node, 1);
-            }
-            
-
-            /*****************************************************************************************************
-             * @brief   copy a node and it's value from a node-pointer.
-             *
-             * @details this only exists to make the interface with the
-             *          individual node-types easier, as they can call
-             *          a clone-method by just pointing to it's descendants,
-             *          without actually knowing about the value-type that
-             *          the node will have in the tree.
-             *          this only works if the object at that location
-             *          is actually of type 'value_node_type', but as
-             *          this is the only type actually allocated and
-             *          constructed, the static-casting should be OK.
-             *****************************************************************************************************/
-            [[nodiscard]]
-            constexpr _M_vnode_ptr_t
-            _M_copy_node(_M_node_ptr_t node)
-                requires std::copyable<_M_value_t>
-            {
-                return _M_new_node(static_cast<_M_vnode_ptr_t>(node)->value());
+                _M_node_alloc_traits_t::destroy(this->_M_get_node_alloc(), _node);
+                _M_node_alloc_traits_t::deallocate(this->_M_get_node_alloc(), _node, 1);
             }
             
         public:
@@ -115,30 +99,32 @@ namespace tl
             using value_type      = typename _M_alloc_traits_t::value_type; 
             using pointer         = typename _M_alloc_traits_t::pointer;
             using const_pointer   = typename _M_alloc_traits_t::const_pointer;
-            using reference       = typename _M_alloc_traits_t::reference;
-            using const_reference = typename _M_alloc_traits_t::const_reference;
+            using reference       = value_type&;
+            using const_reference = const value_type&;
             using size_type       = typename _M_alloc_traits_t::size_type;
 
             /***************************************************
-             * @brief constructors. 
+             * @brief constructor (1).
              *        default-constructible if allocator_type
              *        is default-constructible.
              ***************************************************/
-
             constexpr 
-            tree_allocator_base()
+            _Tree_Alloc_Base()
                 noexcept(std::is_nothrow_default_constructible_v<_M_alloc_t>)
                 requires std::default_initializable<_M_alloc_t>   
                 : _M_alloc(_M_alloc_t())
             { }
 
+            /***************************************************
+             * @brief constructor (2).
+             *        constructs from a given allocator-instance.
+             ***************************************************/
             constexpr
-            tree_allocator_base(const allocator_type& alloc)
+            _Tree_Alloc_Base(const allocator_type& alloc)
                 noexcept(std::is_nothrow_copy_constructible_v<allocator_type>)
                 requires std::copyable<allocator_type>
                 : _M_alloc(alloc)
             { }
-
 
             /***************************************************
              * @returns the associated allocator.
@@ -148,7 +134,6 @@ namespace tl
             get_allocator() 
                 const noexcept 
             { return _M_alloc_t(this->_M_get_node_alloc()); }
-
 
             /***************************************************
              * @returns the maximum possible number of elements.

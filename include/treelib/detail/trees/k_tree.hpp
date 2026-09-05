@@ -2,13 +2,28 @@
 #ifndef TREELIB_K_TREE_HPP
 #define TREELIB_K_TREE_HPP
 
-/**
+/***************************************************
  * @file   treelib/detail/trees/k_tree.hpp
  * @author Julian Benzel
- * @date   04.07.2026
+ * @date   04.09.2026
  *
- * @brief  type-generic k-ary-tree.
- */
+ * @brief   type-generic k-ary-tree.
+ * @details compile-options:
+ *          1.) #define TREELIB_NO_EXCEPTIONS
+ *              disables exception-safety. asserts are
+ *              still used in debug-mode.
+ *          
+ *          2.) #define TREELIB_K_NODE_NO_SHIFT
+ *              disables shifting-behaviour of k-tree-nodes:
+ *              if a node should hook another to an 
+ *              already occupied spot, that node will
+ *              still be inserted, and the 'replaced
+ *              one' will be shifted down to the same
+ *              hook-spot of the newly inserted node.
+ *
+ *              disabling this will throw 
+ *              tl::modification_error instead.
+ ***************************************************/
 
 #include <treelib/detail/bits/except.hpp>
 #include <treelib/detail/base/node.hpp>
@@ -20,79 +35,131 @@
 #include <cassert>
 #include <ranges>
 
-// #define TREELIB_NO_EXCEPTIONS
-// #define TREELIB_WEAK_K_TREE_NO_SHIFT
-
 namespace tl
 {
-
     namespace detail 
     {
-
-        template <std::size_t K>
-        struct k_node
+        template <typename _NodeT, std::size_t K>
+        struct _K_Node_Base
         {
-            std::array<k_node*, K> m_children;
+            using _M_node_t      = _NodeT;
+            using _M_node_ptr_t  = _M_node_t*;
+            using _M_cnode_ptr_t = const _M_node_t*;
+            using _M_hook_t = std::size_t;
 
-            using out_hook_type = std::size_t;
+            std::array<_M_node_ptr_t, K> _M_children_array;
 
+        protected:
+
+            friend _M_node_t;
+
+            /***************************************************
+             * constructor (1).
+             * default-constructible,
+             *
+             * this constructor is marked protected because
+             * this CRTP-base should not be instantiated
+             * on it's own.
+             ***************************************************/
+            _K_Node_Base()
+                : _M_children_array({nullptr})
+            { }
+
+        public:
             
-            constexpr k_node*
-            at_hook(out_hook_type what)
-            { return this->m_children.at(what); }
-
-
             constexpr void
-            hook_as(out_hook_type what, k_node& where)
+            _M_hook_at(_M_hook_t at, _M_node_ptr_t node)
             {
-            #ifdef TREELIB_WEAK_K_TREE_NO_SHIFT
+                if (at >= K)
+                    throw modification_error("hook-index out-of-range");
+            #ifdef TREELIB_K_NODE_NO_SHIFT
                 #ifdef TREELIB_NO_EXCEPTIONS
-                    assert(where.m_children[what] != nullptr);
+                    assert(this->_M_children_array[at] != nullptr);
                 #else
-                    if (where.m_children[what] != nullptr)
+                    if (this->_M_children_array[at] != nullptr)
                     { throw modification_error("cannot insert at occupied hook"); }
                 #endif
             #else
-                if (where.m_children[what] != nullptr) {
-                    // might explode if this->m_children[what] is
-                    // also occupied by another node, needs testing?
-                    where.m_children[what]->hook_as(what, *this);
+                if (this->_M_children_array[at] != nullptr) {
+                    node->_M_children_array[at]->_M_hook_at(at, this->_M_children_array[at]);
                 }
             #endif
-                where.m_children[what] = this;
+                this->_M_children_array[at] = node;
             }
 
+            constexpr _M_node_ptr_t
+            _M_unhook_at(_M_hook_t at)
+                noexcept
+            {
+                if (at >= K)
+                    throw modification_error("hook-index out-of-range");
+                _M_node_ptr_t res = this->_M_children_array[at];
+                this->_M_children_array[at] = nullptr;
+                return res;
+            }
+
+            constexpr void
+            _M_unhook_if(_M_node_ptr_t node)
+                noexcept
+            {
+                for (_M_cnode_ptr_t& p : this->_M_children_array)
+                    if (p == node)
+                        { p = nullptr; break; }
+            }
 
             constexpr auto
-            out_neighbours()
+            _M_children()
+                noexcept
             {
-                return this->m_children
-                       | std::views::filter([](k_node* x) { return x != nullptr; });
+                return this->_M_children_array
+                       | std::views::filter
+                       ([](_M_node_ptr_t p) 
+                       { return p != nullptr; });
+            }
+
+            constexpr auto
+            _M_children()
+                const noexcept
+            {
+                return this->_M_children_array
+                       | std::views::filter
+                       ([](_M_cnode_ptr_t p) 
+                        { return p != nullptr; });
             }
 
             template <typename Fn>
-                requires node_copy_invocable<Fn, weak_k_tree_node>
-            weak_k_tree_node* clone(Fn&& copy)
-                const
+                requires std::invocable<Fn, _M_hook_t, _M_node_ptr_t, _M_cnode_ptr_t>
+            constexpr void
+            _M_mimic(_M_cnode_ptr_t src, Fn&& insert_fn)
             {
-                weak_k_tree_node* tmp = copy(this);
-                for (std::size_t i = 0; i < K; ++i)
-                { 
-                    if (this->m_children[i] != nullptr)
-                    { 
-                        tmp->m_children[i] = this->m_children[i]->clone(std::forward<Fn>(copy)); 
+                for (_M_hook_t at = 0; at < K; ++at)
+                {
+                    _M_cnode_ptr_t cur = src->_M_children_array[at];
+                    if (cur != nullptr)
+                    {
+                        insert_fn(at, this, cur); // assume that .hook_at will be called
+                        assert(this->_M_children_array[at] != nullptr);
+                        this->_M_children_array[at]->_M_mimic(cur, std::forward<Fn>(insert_fn));
                     }
                 }
-                return tmp;
             }
         };
 
 
         template <std::size_t K>
-        struct strong_k_tree_node 
-        {
-
+        struct _K_Node
+            : public _K_Node_Base<_K_Node<K>, K>
+        { 
+            _K_Node() = default;
         };
+
+        template <std::size_t K>
+        struct _Parent_K_Node
+            : public _Parent_Node_Base<_K_Node_Base<_Parent_K_Node<K>, K>>
+        { 
+            _Parent_K_Node() = default;
+        };
+
     }
 
     
@@ -100,9 +167,14 @@ namespace tl
               std::size_t K,
               typename Allocator = std::allocator<T>>
     class outward_k_tree
-        : public detail::outward_tree_base<detail::k_node<K>, Allocator>
+        : public detail::_Outward_Tree_Base<detail::_K_Node<K>, Allocator>
     { 
+    protected:
+        using _M_base_t = detail::_Outward_Tree_Base<detail::_K_Node<K>, Allocator>;
 
+    public:
+        
+        using _M_base_t::_M_base_t;
     };
 
 
@@ -110,9 +182,14 @@ namespace tl
               std::size_t K,
               typename Allocator = std::allocator<T>>
     class k_tree
-        : public detail::tree_base<detail::k_node<K>, Allocator>
-    { 
+        : public detail::_Tree_Base<detail::_Parent_K_Node<K>, Allocator>
+    {
+    protected:
+        using _M_base_t = detail::_Tree_Base<detail::_Parent_K_Node<K>, Allocator>;
 
+    public:
+        
+        using _M_base_t::_M_base_t;
     };
 
 }

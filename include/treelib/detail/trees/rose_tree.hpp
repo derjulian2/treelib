@@ -2,101 +2,168 @@
 #ifndef TREELIB_ROSE_TREE_HPP
 #define TREELIB_ROSE_TREE_HPP
 
-/**
- * @file   treelib/trees/rose_tree.hpp
+/***************************************************
+ * @file   treelib/detail/trees/rose_tree.hpp
  * @author Julian Benzel
- * @date   04.07.2026
+ * @date   04.09.2026
  *
- * @brief  type-generic tree without any constraints
+ * @brief  type-generic trees without any constraints
  *         on the number of children per node.
- */
-
-
+ ***************************************************/
 
 #include <vector>
-#include <utility>
+#include <variant>
+#include <ranges>
+#include <cstdint>
 
 namespace tl
 {
+    enum struct rose_vhook
+        : std::uint8_t
+    {
+        first,
+        last
+    };
+
+    enum struct rose_hhook
+        : std::uint8_t
+    {
+        next,
+        prev
+    };
+
     namespace detail
     {
-        template <typename T>
-        struct vecrose_node_base
+        class vecrose_node
         {
-            std::vector<T*> 
+        protected:
+    
+            std::vector<vecrose_node*> _M_children;
+
+        public:
+
+            // either an index, or first/last
+            using hook_type = std::variant<std::size_t, rose_vhook>;
+
+            vecrose_node()
+                : _M_children()
+            { }
+            
+            constexpr void
+            hook_at(hook_type at, vecrose_node* node)
+            {
+                
+            }
+
+            constexpr vecrose_node*
+            unhook_at(hook_type at)
+                noexcept
+            {
+                
+            }
+
+            constexpr void
+            unhook_if(const vecrose_node* node)
+                noexcept
+            {
+                
+            }
+
+            constexpr std::vector<vecrose_node*>&
+            children()
+                noexcept
+            {
+                return this->_M_children;
+            }
+
+            constexpr const std::vector<vecrose_node*>&
+            children()
+                const noexcept
+            {
+                return this->_M_children;
+            }
+
+            template <typename Fn>
+                requires std::invocable<Fn, hook_type, vecrose_node*, const vecrose_node*>
+            constexpr void
+            mimic(const vecrose_node* src, Fn&& insert_fn)
+            {
+                
+            }
+        };
+
+
+        class listrose_node
+        {
+        protected:
+    
+            listrose_node* _M_next;
+            listrose_node* _M_prev;
+
+            listrose_node* _M_first;
+            listrose_node* _M_last;
+
+        public:
+
+            using hook_type = std::variant<rose_vhook, rose_hhook>;
+
+            listrose_node()
+                : _M_next(nullptr)
+                , _M_prev(nullptr)
+                , _M_first(nullptr)
+                , _M_last(nullptr)
+            { }
+            
+            constexpr void
+            hook_at(hook_type at, vecrose_node* node)
+            {
+                
+            }
+
+            constexpr vecrose_node*
+            unhook_at(hook_type at)
+                noexcept
+            {
+                
+            }
+
+            constexpr void
+            unhook_if(const vecrose_node* node)
+                noexcept
+            {
+                
+            }
+
+            constexpr std::vector<vecrose_node*>&
+            children()
+                noexcept
+            {
+                return this->_M_children;
+            }
+
+            constexpr const std::vector<vecrose_node*>&
+            children()
+                const noexcept
+            {
+                return this->_M_children;
+            }
+
+            template <typename Fn>
+                requires std::invocable<Fn, hook_type, vecrose_node*, const vecrose_node*>
+            constexpr void
+            mimic(const vecrose_node* src, Fn&& insert_fn)
+            {
+                
+            }
         };
     }
 
-    struct weak_vecrose_node
-    {
-        std::vector<weak_vecrose_node*> m_children;
-    };
 
-    struct vecrose_node
-    {
-        vecrose_node               *m_parent;
-        std::vector<vecrose_node*>  m_children;
-    };
-
-    struct weak_rose_tree_node
-        : public weak_node_base
-    {
-        weak_rose_tree_node *m_first_child = nullptr;
-        weak_rose_tree_node *m_next        = nullptr;
-
-        enum struct hook_type : std::uint8_t
-        {
-            first_child,
-            next
-        };
-
-        weak_rose_tree_node*&
-        from_hook(const hook_type& h)
-        { 
-            if (h == hook_type::first_child)
-                return m_first_child;
-            else
-                return m_next;
-        }
-
-        void
-        hook_as(const hook_type& h, weak_rose_tree_node* parent)
-        { 
-            parent->from_hook(h) = this;
-        }
-
-        template <typename Fn>
-        static constexpr
-        void for_hooks(Fn&& fn)
-        { fn(hook_type::first_child); fn(hook_type::next); }
-
-        std::vector<weak_rose_tree_node*>
-        children()
-        {
-            std::vector<weak_rose_tree_node*> res;
-            weak_rose_tree_node* iter = m_first_child;
-            while (iter)
-            {
-                res.push_back(iter);
-                iter = iter->m_next;
-            }
-            return res;
-        }    
-    };
-
-    struct rose_tree_node
-        : public node_base
-    {
-        rose_tree_node *m_last_child;
-        rose_tree_node *m_prev;
-
-        rose_tree_node *m_parent;
-    };
 
 
     template <typename T, 
               typename Allocator = std::allocator<T>>
-    class weak_vecrose_tree
+    class outward_vecrose_tree
         : public weak_tree_base<weak_rose_tree_node, Allocator>
     { };
 
@@ -109,7 +176,7 @@ namespace tl
 
         template <typename T, 
               typename Allocator = std::allocator<T>>
-    class weak_listrose_tree
+    class outward_listrose_tree
         : public weak_tree_base<weak_rose_tree_node, Allocator>
     { };
 
