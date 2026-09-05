@@ -11,6 +11,11 @@
  *         on the number of children per node.
  ***************************************************/
 
+#include <treelib/detail/bits/except.hpp>
+#include <treelib/detail/base/node.hpp>
+#include <treelib/detail/base/tree.hpp>
+#include <treelib/detail/base/forest.hpp>
+
 #include <vector>
 #include <variant>
 #include <ranges>
@@ -18,14 +23,14 @@
 
 namespace tl
 {
-    enum struct rose_vhook
+    enum struct vrose
         : std::uint8_t
     {
         first,
         last
     };
 
-    enum struct rose_hhook
+    enum struct hrose
         : std::uint8_t
     {
         next,
@@ -43,7 +48,7 @@ namespace tl
         public:
 
             // either an index, or first/last
-            using hook_type = std::variant<std::size_t, rose_vhook>;
+            using hook_type = std::variant<std::size_t, vrose>;
 
             vecrose_node()
                 : _M_children()
@@ -105,7 +110,7 @@ namespace tl
 
         public:
 
-            using hook_type = std::variant<rose_vhook, rose_hhook>;
+            using hook_type = std::variant<vrose, hrose>;
 
             listrose_node()
                 : _M_next(nullptr)

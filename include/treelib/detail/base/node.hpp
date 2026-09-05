@@ -117,71 +117,6 @@ namespace tl
                 { t->_M_mimic(ct, [](typename T::_M_hook_t, T*, const T*) -> void { }) };
             };
 
-
-        /***************************************************
-         * @brief additional functionality and common
-         *        interface for every type satisying the
-         *        requirements for a tree-node.
-         ***************************************************/
-        template <typename _NodeT>
-            requires _Is_Node<_NodeT>
-        struct _Node_Traits
-        {
-            using _M_node_t = _NodeT;
-            using _M_ptr_t  = _M_node_t*;
-            using _M_cptr_t = const _M_node_t*;
-            using _M_ref_t  = _M_node_t&;
-            using _M_cref_t = const _M_node_t&;
-
-            using _M_hook_t = _M_node_t::_M_hook_t;
-
-
-            static constexpr void
-            _S_hook_at(_M_ptr_t _parent, _M_hook_t _at, _M_ptr_t _node)
-            {
-                _parent->_M_hook_at(_at, _node);
-            }
-
-            static constexpr _M_ptr_t
-            _S_unhook_at(_M_ptr_t _parent, _M_hook_t _at)
-            {
-                return _parent->_M_unhook_at(_at);
-            }
-
-            static constexpr void
-            _S_unhook_if(_M_ptr_t _parent, _M_ptr_t _node)
-            {
-                _parent->_M_unhook_if(_node);
-            }
-
-            static constexpr decltype(auto)
-            _S_children(_M_ptr_t _node)
-            { 
-                return _node->_M_children(); 
-            }
-
-            static constexpr decltype(auto)
-            _S_children(_M_cptr_t _node)
-            {
-                return _node->_M_children();
-            }
-
-            template <typename Fn>
-                requires std::invocable<Fn, _M_hook_t, _M_ptr_t, _M_cptr_t>
-            constexpr void
-            _S_mimic(_M_ptr_t _node, _M_cptr_t _src, Fn&& _insert_fn)
-            {   
-                _node->_M_mimic(_src, std::forward<Fn>(_insert_fn));
-            }
-
-            static constexpr bool
-            _S_is_leaf(_M_cptr_t _node)
-            { 
-                return std::ranges::empty(_node->_M_children());
-            }
-        };
-
-
         /***************************************************
          * @brief class-extender that adds an instance
          *        of value-type to the passed node-type.
@@ -348,7 +283,7 @@ namespace tl
 
         };
 
-        template <typename T, typename U>
+        template <typename T>
         concept _Is_Parent_Node
             = requires(T* t, const T* ct)
             {
@@ -358,7 +293,94 @@ namespace tl
                 { ct->_M_get_parent() }
                     -> std::convertible_to<const T*>;
                 { ct->_M_is_root() };
+                { t->_M_next_sibling() }
+                    -> std::convertible_to<T*>;
+                { ct->_M_next_sibling() }
+                    -> std::convertible_to<const T*>;
+                { t->_M_prev_sibling() }
+                    -> std::convertible_to<T*>;
+                { ct->_M_prev_sibling() }
+                    -> std::convertible_to<const T*>;
             };
+
+        /***************************************************
+         * @brief additional functionality and common
+         *        interface for every type satisying the
+         *        requirements for a tree-node.
+         ***************************************************/
+        template <typename _NodeT>
+            requires _Is_Node<_NodeT>
+        struct _Node_Traits
+        {
+            using _M_node_t = _NodeT;
+            using _M_ptr_t  = _M_node_t*;
+            using _M_cptr_t = const _M_node_t*;
+            using _M_ref_t  = _M_node_t&;
+            using _M_cref_t = const _M_node_t&;
+
+            using _M_hook_t = _M_node_t::_M_hook_t;
+
+
+            static constexpr void
+            _S_hook_at(_M_ptr_t _parent, _M_hook_t _at, _M_ptr_t _node)
+            { _parent->_M_hook_at(_at, _node); }
+
+            static constexpr _M_ptr_t
+            _S_unhook_at(_M_ptr_t _parent, _M_hook_t _at)
+            { return _parent->_M_unhook_at(_at); }
+
+            static constexpr void
+            _S_unhook_if(_M_ptr_t _parent, _M_ptr_t _node)
+            { _parent->_M_unhook_if(_node); }
+
+            static constexpr decltype(auto)
+            _S_children(_M_ptr_t _node)
+            { return _node->_M_children(); }
+
+            static constexpr decltype(auto)
+            _S_children(_M_cptr_t _node)
+            { return _node->_M_children(); }
+
+            template <typename Fn>
+                requires std::invocable<Fn, _M_hook_t, _M_ptr_t, _M_cptr_t>
+            constexpr void
+            _S_mimic(_M_ptr_t _node, _M_cptr_t _src, Fn&& _insert_fn)
+            { _node->_M_mimic(_src, std::forward<Fn>(_insert_fn)); }
+
+            static constexpr bool
+            _S_is_leaf(_M_cptr_t _node)
+            { return std::ranges::empty(_node->_M_children()); }
+
+            template <typename _IterT>
+            static constexpr _IterT 
+            _S_to_iter(_M_ptr_t _node)
+            { return _IterT(_node); }
+
+            template <typename _IterT>
+            static constexpr _M_ptr_t 
+            _S_from_iter(_IterT&& _iter)
+            { return _iter->_M_cur(); }
+
+            static constexpr _M_ptr_t
+            _S_next_sibling(_M_ptr_t _node)
+                requires _Is_Parent_Node<_M_node_t>
+            { return _node->_M_next_sibling(); }
+
+            static constexpr _M_cptr_t
+            _S_next_sibling(_M_cptr_t _node)
+                requires _Is_Parent_Node<_M_node_t>
+            { return _node->_M_next_sibling(); }
+
+            static constexpr _M_ptr_t
+            _S_prev_sibling(_M_ptr_t _node)
+                requires _Is_Parent_Node<_M_node_t>
+            { return _node->_M_prev_sibling(); }
+
+            static constexpr _M_cptr_t
+            _S_prev_sibling(_M_cptr_t _node)
+                requires _Is_Parent_Node<_M_node_t>
+            { return _node->_M_prev_sibling(); }
+        };
     }
 }
 

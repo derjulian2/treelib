@@ -30,6 +30,7 @@ namespace tl
          ***************************************************/
         template <typename _NodeT,
                   typename _AllocT>
+            requires _Is_Node<_NodeT>
         class _Outward_Tree_Base
             : public _Tree_Alloc_Base<_NodeT, _AllocT>
         {
@@ -109,8 +110,10 @@ namespace tl
             using typename _M_base_t::size_type;
             using typename _M_base_t::value_type;
 
-            using iterator       = tl::queued_iterator<value_type, _M_node_t>;
-            using const_iterator = tl::queued_iterator<const value_type, _M_node_t>;
+            using default_traversal_type = tl::depth_first_pre_order<_M_node_t>;
+
+            using iterator       = tl::queued_iterator<value_type, default_traversal_type>;
+            using const_iterator = tl::queued_iterator<const value_type, default_traversal_type>;
             using hook_type      = _M_node_t::_M_hook_t;
 
             /***************************************************
@@ -150,7 +153,7 @@ namespace tl
                                const allocator_type& alloc = allocator_type())
                 : _Outward_Tree_Base(alloc)
             {
-                this->insert(value);
+                this->insert_root(value);
             }
 
             /***************************************************
@@ -163,7 +166,7 @@ namespace tl
                                const allocator_type& alloc = allocator_type())
                 : _Outward_Tree_Base(alloc)
             {
-                this->emplace(value);
+                this->emplace_root(value);
             }
 
             /***************************************************
@@ -247,7 +250,7 @@ namespace tl
             constexpr iterator 
             root()
                 noexcept
-            { return iterator(this->_M_root); }
+            { return _M_node_traits_t::template _S_to_iter<iterator>(this->_M_root); }
 
             /***************************************************
              * @returns an iterator to the root of the tree.
@@ -256,7 +259,7 @@ namespace tl
             constexpr const_iterator 
             croot()
                 const noexcept
-            { return const_iterator(this->_M_root); }
+            { return _M_node_traits_t::template _S_to_iter<const_iterator>(this->_M_root); }
 
             /***************************************************
              * @returns an iterator to the beginning.
@@ -265,7 +268,7 @@ namespace tl
             constexpr iterator 
             begin() 
                 noexcept
-            { return iterator(this->_M_root); }
+            { return _M_node_traits_t::template _S_to_iter<iterator>(this->_M_root); }
 
             /***************************************************
              * @returns an iterator to the beginning.
@@ -274,7 +277,7 @@ namespace tl
             constexpr const_iterator
             cbegin()
                 const noexcept
-            { return const_iterator(this->_M_root); }
+            { return _M_node_traits_t::template _S_to_iter<const_iterator>(this->_M_root); }
 
             /***************************************************
              * @returns an iterator to the end.
@@ -282,7 +285,7 @@ namespace tl
             constexpr iterator 
             end()
                 noexcept
-            { return iterator(nullptr); }
+            { return _M_node_traits_t::template _S_to_iter<iterator>(nullptr); }
 
             /***************************************************
              * @returns an iterator to the end.
@@ -290,7 +293,7 @@ namespace tl
             constexpr const_iterator
             cend()
                 const noexcept
-            { return const_iterator(nullptr); }
+            { return _M_node_traits_t::template _S_to_iter<const_iterator>(nullptr); }
 
             /***************************************************
              * @brief construct a node in-place, as
@@ -299,14 +302,15 @@ namespace tl
              *         already has a root-node (is non-empty). 
              ***************************************************/
             template <typename... Args>
+                requires std::constructible_from<value_type, Args...>
             constexpr iterator
-            emplace(Args&&... args)
+            emplace_root(Args&&... args)
             {
                 if (!this->empty())
                     throw tl::modification_error("tree already has a root-node");
                 this->_M_root = this->_M_new_node(std::forward<Args>(args)...);
                 this->_M_inc_size();
-                return iterator(this->_M_root);
+                return _M_node_traits_t::template _S_to_iter<iterator>(this->_M_root);
             }
 
             /***************************************************
@@ -315,9 +319,9 @@ namespace tl
              *         already has a root-node (is non-empty). 
              ***************************************************/
             constexpr iterator
-            insert(const value_type& value)
+            insert_root(const value_type& value)
             {
-                return this->emplace(value);
+                return this->emplace_root(value);
             }
 
             /***************************************************
@@ -331,9 +335,9 @@ namespace tl
             emplace(hook_type as, const_iterator where, Args&&... args)
             {
                 _M_node_ptr_t _new_node = this->_M_new_node(std::forward<Args>(args)...);
-                static_cast<_M_node_ptr_t>(where)->hook_at(as, _new_node);
+                _M_node_traits_t::_S_hook_at(where, as, _new_node);
                 this->_M_inc_size();
-                return iterator(_new_node);
+                return _M_node_traits_t::template _S_to_iter<iterator>(_new_node);
             }
 
             /***************************************************
@@ -435,6 +439,7 @@ namespace tl
          ***************************************************/
         template <typename _NodeT,
                   typename _AllocT>
+            requires _Is_Parent_Node<_NodeT>
         struct _Tree_Base
             : public _Outward_Tree_Base<_NodeT, _AllocT>
         {

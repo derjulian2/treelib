@@ -36,11 +36,116 @@
 namespace tl
 {
     namespace detail
-    {
-        template <typename _NodeT>
-        struct _Iter_Base
+    {  
+        template <typename _ValueT,
+                  typename _NodeT, 
+                  typename _IterT>
+        class _Iter_Base
         {
+        public:
+        
+            using iterator_category = std::bidirectional_iterator_tag;
+            using difference_type   = std::ptrdiff_t;
+            using value_type        = _ValueT;
+            using pointer           = value_type*;
+            using const_pointer     = const value_type*;
+            using reference         = value_type&;
+            using const_reference   = const value_type&;
 
+        protected:
+
+            using _M_iter_t = _IterT;
+            using _M_ptr_t  = _M_iter_t*;
+
+            using _M_node_t       = _NodeT;
+            using _M_node_ptr_t   = _M_node_t*;
+            using _M_cnode_ptr_t  = const _M_node_t*;
+            using _M_value_node_t = detail::_Value_Node<_M_node_t, value_type>;
+            using _M_vnode_ptr_t  = _M_value_node_t*;
+
+            _M_node_ptr_t _M_node;
+
+            constexpr _M_ptr_t
+            _M_iter()
+            { return static_cast<_M_ptr_t>(this); }
+
+            constexpr _M_node_ptr_t
+            _M_cur()
+            { return this->_M_iter()->_M_cur(); }
+
+            constexpr
+            _Iter_Base()
+                : _M_node(nullptr)
+            { }
+
+            constexpr
+            _Iter_Base(_M_node_ptr_t _node)
+                : _M_node(_node)
+            { }
+
+            friend _M_iter_t;
+            friend class _Node_Traits<_M_node_t>;
+
+        public:
+
+            // temporary i swear
+
+            constexpr
+            operator _M_node_ptr_t()
+            { return this->_M_cur(); }
+
+            constexpr
+            operator _M_cnode_ptr_t()
+                const
+            { return this->_M_cur(); }
+
+            template <typename _OtherValueT>
+                requires std::same_as<std::decay_t<_ValueT>, std::decay_t<_OtherValueT>>
+            friend 
+            constexpr bool
+            operator==(const _Iter_Base& a, const _Iter_Base& b)
+                noexcept
+            { return a._M_cur() == b._M_cur(); }
+
+            constexpr reference 
+            operator*()
+            {
+            #ifdef TREELIB_NO_EXCEPTIONS
+                assert(this->_M_cur() != nullptr)
+            #else
+                if (this->_M_cur() == nullptr)
+                    throw std::out_of_range("cannot dereference end-iterator");
+                return static_cast<_M_vnode_ptr_t>(this->_M_cur())->_M_get_value();
+            #endif
+            }
+
+            constexpr pointer 
+            operator->()
+            {
+            #ifdef TREELIB_NO_EXCEPTIONS
+                assert(this->_M_cur() != nullptr)
+            #else
+                if (this->_M_cur() == nullptr)
+                    throw std::out_of_range("invalid iterator-dereference");
+                return std::addressof(static_cast<_M_vnode_ptr_t>(this->_M_cur())->_M_get_value());
+            #endif
+            }
+
+            constexpr _M_iter_t
+            operator++(int)
+            {
+                _M_iter_t _tmp = *this;
+                ++(*this->_M_iter());
+                return _tmp;
+            }
+
+            constexpr _IterT
+            operator--(int)
+            { 
+                _M_iter_t _tmp = *this;
+                --(*this->_M_iter());
+                return _tmp;
+            }
         };
     }
     
@@ -49,8 +154,8 @@ namespace tl
     {
         using node_type = NodeType;
 
-        node_info(detail::_Iter_Base<node_type>& iter)
-        { }
+        // node_info(detail::_Iter_Base<node_type>& iter)
+        // { }
         
     };
 
@@ -143,112 +248,114 @@ namespace tl
     template <typename ValueType, 
               typename TraversalType>
     class queued_iterator
+        : public detail::_Iter_Base<ValueType, 
+                                    typename TraversalType::node_type, 
+                                    queued_iterator<ValueType, TraversalType>>
     {
     public:
 
-        using traversal_type  = TraversalType;
-        using iterator_category = std::bidirectional_iterator_tag;
-        using difference_type   = std::ptrdiff_t;
-        using value_type        = ValueType;
-        using pointer           = value_type*;
-        using const_pointer     = const value_type*;
-        using reference         = value_type&;
-        using const_reference   = const value_type&;
+        using traversal_type  = TraversalType;  
 
     protected:
 
-        using _M_node_t       = typename traversal_type::node_type;
-        using _M_node_ptr_t   = _M_node_t*;
-        using _M_value_node_t = detail::_Value_Node<_M_node_t, value_type>;
-        using _M_vnode_ptr_t  = _M_value_node_t*;
+        using _M_base_t = detail::_Iter_Base<ValueType, typename TraversalType::node_type, queued_iterator<ValueType, TraversalType>>;
+        using typename _M_base_t::_M_node_t;
+        using typename _M_base_t::_M_node_ptr_t;
 
         using _M_queue_t      = std::deque<_M_node_ptr_t>;
         using _M_queue_iter_t = typename _M_queue_t::iterator;
 
-        _M_node_ptr_t   _M_source;
         _M_queue_t      _M_queue;
-        _M_queue_iter_t _M_iter;
+        _M_queue_iter_t _M_queue_iter;
 
+        friend _M_base_t;
+
+        template <typename, typename>
+        friend class queued_iterator;
 
         constexpr _M_node_ptr_t 
         _M_cur()
             noexcept
         { 
-            return this->_M_queue.empty()
-                    ? nullptr
-                    : *this->_M_iter;      
+            return 
+                // queue is empty, regard the 'source' as
+                // the current-node.
+                this->_M_queue.empty()
+                    ? this->_M_node
+                    :
+                    // reached end of queue-iteration, which
+                    // requires this iterator to compare equal
+                    // to 'tree.end()', which is 'iterator(nullptr)' 
+                    this->_M_queue_iter == this->_M_queue.end()
+                        ? nullptr
+                        : *this->_M_queue_iter
+                    ;      
         }
 
         constexpr void
         _M_enqueue()
         {
-            this->_M_queue = traversal_type::enqueue(this->_M_source);
-            this->_M_iter  = std::ranges::begin(this->_M_queue);
+            this->_M_queue      = traversal_type::enqueue(this->_M_node);
+            this->_M_queue_iter = std::ranges::begin(this->_M_queue);
         }
 
         constexpr bool
         _M_should_enqueue()
             const noexcept
         {
-            return this->_M_iter == _M_queue_iter_t();
+            return this->_M_queue_iter == _M_queue_iter_t();
         }
+
+        constexpr
+        explicit queued_iterator(_M_node_ptr_t _node)
+            : _M_base_t(_node)
+            , _M_queue()
+            , _M_queue_iter()
+        { }
+
+        friend detail::_Node_Traits<_M_node_t>;
 
     public:
 
         constexpr
         queued_iterator()
-            : _M_source(nullptr)
+            : _M_base_t()
             , _M_queue()
-            , _M_iter()
+            , _M_queue_iter()
         { }
 
         constexpr
-        explicit queued_iterator(_M_node_ptr_t node)
-            : _M_source(node)
-            , _M_queue()
-            , _M_iter()
+        queued_iterator(const queued_iterator&)
+            = default;
+
+        /**
+         * allow construction from const-iterators
+         * as well as from iterators with a different
+         * traversal-type (but with the same node-type).
+         */
+        template <typename OtherValueType, typename OtherTraversalType>
+            requires (std::same_as<typename traversal_type::node_type, 
+                                   typename OtherTraversalType::node_type>
+                    // either self is const or other is non-const. 
+                    && (std::same_as<std::decay_t<ValueType>, std::decay_t<OtherValueType>>)
+                    && (std::is_const_v<ValueType> || !std::is_const_v<OtherValueType>))
+        constexpr
+        queued_iterator(const queued_iterator<OtherValueType, OtherTraversalType>& other)
+            : _M_base_t(other._M_node)
+            , _M_queue(other._M_queue)
+            , _M_queue_iter(other._M_queue_iter)
         { }
 
         constexpr void
         refresh()
         { this->_M_enqueue(); }
 
-        friend 
-        constexpr bool
-        operator==(const queued_iterator& a, const queued_iterator& b)
-            noexcept
-        { return a._M_cur() == b._M_cur(); }
-
-        constexpr reference 
-        operator*()
-        {
-        #ifdef TREELIB_NO_EXCEPTIONS
-            assert(this->_M_cur() != nullptr)
-        #else
-            if (this->_M_cur() == nullptr)
-                throw std::out_of_range("cannot dereference end-iterator");
-            return static_cast<_M_vnode_ptr_t>(this->_M_cur())->_M_get_value();
-        #endif
-        }
-
-        constexpr pointer 
-        operator->()
-        {
-        #ifdef TREELIB_NO_EXCEPTIONS
-            assert(this->_M_cur() != nullptr)
-        #else
-            if (this->_M_cur() == nullptr)
-                throw std::out_of_range("invalid iterator-dereference");
-            return std::addressof(static_cast<_M_vnode_ptr_t>(this->_M_cur())->_M_get_value());
-        #endif
-        }
-
         constexpr queued_iterator& 
         operator++()
         { 
             if (this->_M_should_enqueue())
             { this->_M_enqueue(); }
-            ++this->_M_iter;
+            ++this->_M_queue_iter;
             return *this;
         }
 
@@ -257,24 +364,8 @@ namespace tl
         { 
             if (this->_M_should_enqueue())
             { this->_M_enqueue(); }
-            --this->_M_iter;
+            --this->_M_queue_iter;
             return *this; 
-        }
-
-        constexpr queued_iterator
-        operator++(int)
-        {
-            queued_iterator tmp = *this;
-            ++(*this);
-            return tmp;
-        }
-
-        constexpr queued_iterator
-        operator--(int)
-        { 
-            queued_iterator tmp = *this;
-            --(*this);
-            return tmp;
         }
     };
 
@@ -283,8 +374,8 @@ namespace tl
     struct depth_first_pre_order
     {
         using node_traits  = tl::detail::_Node_Traits<NodeType>;
-        using node_type    = typename node_traits::node_type;
-        using node_pointer = typename node_traits::pointer;
+        using node_type    = typename node_traits::_M_node_t;
+        using node_pointer = typename node_traits::_M_ptr_t;
 
         /**
          * @brief constructs an iterable sequence of node-pointers
@@ -307,13 +398,33 @@ namespace tl
                 result.push_back(cur);
                 stack.pop();
 
+                // go over children in reverse order here
+                // because the top of the stack will actually
+                // have the last child otherwise.
                 for (node_pointer& c 
-                     : node_traits::_S_children(cur))
-                {
+                     : node_traits::_S_children(cur)
+                     | std::views::reverse)
                     stack.push(c);
-                }
             }
             return result;
+        }
+
+        static constexpr node_pointer
+        next(node_pointer node)
+            requires detail::_Is_Parent_Node<node_type>
+        {
+            if (node_traits::_S_is_leaf(node))
+            {
+
+            }
+            return *std::ranges::begin(node_traits::_S_children(node));
+        }
+
+        static constexpr node_pointer
+        prev(node_pointer node)
+            requires detail::_Is_Parent_Node<node_type>
+        {
+
         }
     };
 

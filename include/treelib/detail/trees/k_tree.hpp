@@ -61,6 +61,7 @@ namespace tl
              * this CRTP-base should not be instantiated
              * on it's own.
              ***************************************************/
+            constexpr
             _K_Node_Base()
                 : _M_children_array({nullptr})
             { }
@@ -150,6 +151,7 @@ namespace tl
         struct _K_Node
             : public _K_Node_Base<_K_Node<K>, K>
         { 
+            constexpr
             _K_Node() = default;
         };
 
@@ -157,7 +159,77 @@ namespace tl
         struct _Parent_K_Node
             : public _Parent_Node_Base<_K_Node_Base<_Parent_K_Node<K>, K>>
         { 
+            using _M_base_t = _Parent_Node_Base<_K_Node_Base<_Parent_K_Node<K>, K>>;
+            using typename _M_base_t::_M_node_t;
+            using typename _M_base_t::_M_node_ptr_t;
+            using typename _M_base_t::_M_cnode_ptr_t;
+
+            constexpr
             _Parent_K_Node() = default;
+
+            constexpr bool
+            _M_is_last()
+                const noexcept
+            {
+                assert(!this->_M_is_root());
+                return this->_M_get_parent()->_M_children_array.back() == this;
+            }
+
+            constexpr bool
+            _M_is_first()
+                const noexcept
+            {
+                assert(!this->_M_is_root());
+                return this->_M_get_parent()->_M_children_array.front() == this;
+            }
+
+            constexpr _M_node_ptr_t
+            _M_next_sibling()
+                noexcept
+            {
+                if (this->_M_is_root() || this->_M_is_last())
+                    return nullptr;
+                // calculate offset of this node to get to it's position
+                // in the child_array of the parent-node
+                std::ptrdiff_t _off = this - this->_M_get_parent()->_M_child_array.cdata();
+                return this->_M_get_parent()->_M_child_array[_off + 1];
+            }
+
+            constexpr _M_cnode_ptr_t
+            _M_next_sibling()
+                const noexcept
+            {
+                if (this->_M_is_root() || this->_M_is_last())
+                    return nullptr;
+                // calculate offset of this node to get to it's position
+                // in the child_array of the parent-node
+                std::ptrdiff_t _off = this - this->_M_get_parent()->_M_child_array.cdata();
+                return this->_M_get_parent()->_M_child_array[_off + 1];
+            }
+
+            constexpr _M_node_ptr_t
+            _M_prev_sibling()
+                noexcept
+            {
+                if (this->_M_is_root() || this->_M_is_first())
+                    return nullptr;
+                // calculate offset of this node to get to it's position
+                // in the child_array of the parent-node
+                std::ptrdiff_t _off = this - this->_M_get_parent()->_M_child_array.cdata();
+                return this->_M_get_parent()->_M_child_array[_off - 1];
+            }
+
+            constexpr _M_cnode_ptr_t
+            _M_prev_sibling()
+                const noexcept
+            {
+                if (this->_M_is_root() || this->_M_is_first())
+                    return nullptr;
+                // calculate offset of this node to get to it's position
+                // in the child_array of the parent-node
+                std::ptrdiff_t _off = this - this->_M_get_parent()->_M_child_array.cdata();
+                return this->_M_get_parent()->_M_child_array[_off - 1];
+            }
         };
 
     }

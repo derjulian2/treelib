@@ -24,13 +24,10 @@ namespace tl
      * Retrieved 2026-09-04, License - CC BY-SA 3.0
      *************************************************************/
 
-    struct binary_hook
+    struct binary
     {
-        enum : std::size_t
-        {
-            left  = 0,
-            right = 1
-        };
+        static constexpr std::size_t left = 0;
+        static constexpr std::size_t right = 1;
     };
 
 
