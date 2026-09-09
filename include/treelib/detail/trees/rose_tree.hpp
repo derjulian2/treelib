@@ -43,7 +43,7 @@ namespace tl
         {
         protected:
     
-            std::vector<vecrose_node*> _M_children;
+            std::vector<vecrose_node*> _m_children;
 
         public:
 
@@ -51,7 +51,7 @@ namespace tl
             using hook_type = std::variant<std::size_t, vrose>;
 
             vecrose_node()
-                : _M_children()
+                : _m_children()
             { }
             
             constexpr void
@@ -78,14 +78,14 @@ namespace tl
             children()
                 noexcept
             {
-                return this->_M_children;
+                return this->_m_children;
             }
 
             constexpr const std::vector<vecrose_node*>&
             children()
                 const noexcept
             {
-                return this->_M_children;
+                return this->_m_children;
             }
 
             template <typename Fn>
@@ -102,21 +102,21 @@ namespace tl
         {
         protected:
     
-            listrose_node* _M_next;
-            listrose_node* _M_prev;
+            listrose_node* _m_next;
+            listrose_node* _m_prev;
 
-            listrose_node* _M_first;
-            listrose_node* _M_last;
+            listrose_node* _m_first;
+            listrose_node* _m_last;
 
         public:
 
             using hook_type = std::variant<vrose, hrose>;
 
             listrose_node()
-                : _M_next(nullptr)
-                , _M_prev(nullptr)
-                , _M_first(nullptr)
-                , _M_last(nullptr)
+                : _m_next(nullptr)
+                , _m_prev(nullptr)
+                , _m_first(nullptr)
+                , _m_last(nullptr)
             { }
             
             constexpr void
@@ -143,14 +143,14 @@ namespace tl
             children()
                 noexcept
             {
-                return this->_M_children;
+                return this->_m_children;
             }
 
             constexpr const std::vector<vecrose_node*>&
             children()
                 const noexcept
             {
-                return this->_M_children;
+                return this->_m_children;
             }
 
             template <typename Fn>

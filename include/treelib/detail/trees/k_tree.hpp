@@ -40,18 +40,18 @@ namespace tl
     namespace detail 
     {
         template <typename _NodeT, std::size_t K>
-        struct _K_Node_Base
+        struct _k_node_base
         {
-            using _M_node_t      = _NodeT;
-            using _M_node_ptr_t  = _M_node_t*;
-            using _M_cnode_ptr_t = const _M_node_t*;
-            using _M_hook_t = std::size_t;
+            using _m_node_t      = _NodeT;
+            using _m_node_ptr_t  = _m_node_t*;
+            using _m_cnode_ptr_t = const _m_node_t*;
+            using _m_hook_t = std::size_t;
 
-            std::array<_M_node_ptr_t, K> _M_children_array;
+            std::array<_m_node_ptr_t, K> _m_children_array;
 
         protected:
 
-            friend _M_node_t;
+            friend _m_node_t;
 
             /***************************************************
              * constructor (1).
@@ -62,85 +62,85 @@ namespace tl
              * on it's own.
              ***************************************************/
             constexpr
-            _K_Node_Base()
-                : _M_children_array({nullptr})
+            _k_node_base()
+                : _m_children_array({nullptr})
             { }
 
         public:
             
             constexpr void
-            _M_hook_at(_M_hook_t at, _M_node_ptr_t node)
+            _m_hook_at(_m_hook_t at, _m_node_ptr_t node)
             {
                 if (at >= K)
                     throw modification_error("hook-index out-of-range");
             #ifdef TREELIB_K_NODE_NO_SHIFT
                 #ifdef TREELIB_NO_EXCEPTIONS
-                    assert(this->_M_children_array[at] != nullptr);
+                    assert(this->_m_children_array[at] != nullptr);
                 #else
-                    if (this->_M_children_array[at] != nullptr)
+                    if (this->_m_children_array[at] != nullptr)
                     { throw modification_error("cannot insert at occupied hook"); }
                 #endif
             #else
-                if (this->_M_children_array[at] != nullptr) {
-                    node->_M_children_array[at]->_M_hook_at(at, this->_M_children_array[at]);
+                if (this->_m_children_array[at] != nullptr) {
+                    node->_m_children_array[at]->_m_hook_at(at, this->_m_children_array[at]);
                 }
             #endif
-                this->_M_children_array[at] = node;
+                this->_m_children_array[at] = node;
             }
 
-            constexpr _M_node_ptr_t
-            _M_unhook_at(_M_hook_t at)
+            constexpr _m_node_ptr_t
+            _m_unhook_at(_m_hook_t at)
                 noexcept
             {
                 if (at >= K)
                     throw modification_error("hook-index out-of-range");
-                _M_node_ptr_t res = this->_M_children_array[at];
-                this->_M_children_array[at] = nullptr;
+                _m_node_ptr_t res = this->_m_children_array[at];
+                this->_m_children_array[at] = nullptr;
                 return res;
             }
 
             constexpr void
-            _M_unhook_if(_M_node_ptr_t node)
+            _m_unhook_if(_m_node_ptr_t node)
                 noexcept
             {
-                for (_M_cnode_ptr_t& p : this->_M_children_array)
+                for (_m_cnode_ptr_t& p : this->_m_children_array)
                     if (p == node)
                         { p = nullptr; break; }
             }
 
             constexpr auto
-            _M_children()
+            _m_children()
                 noexcept
             {
-                return this->_M_children_array
+                return this->_m_children_array
                        | std::views::filter
-                       ([](_M_node_ptr_t p) 
+                       ([](_m_node_ptr_t p) 
                        { return p != nullptr; });
             }
 
             constexpr auto
-            _M_children()
+            _m_children()
                 const noexcept
             {
-                return this->_M_children_array
+                return this->_m_children_array
                        | std::views::filter
-                       ([](_M_cnode_ptr_t p) 
+                       ([](_m_cnode_ptr_t p) 
                         { return p != nullptr; });
             }
 
             template <typename Fn>
-                requires std::invocable<Fn, _M_hook_t, _M_node_ptr_t, _M_cnode_ptr_t>
+                requires std::invocable<Fn, _m_hook_t, _m_node_ptr_t, _m_cnode_ptr_t>
             constexpr void
-            _M_mimic(_M_cnode_ptr_t src, Fn&& insert_fn)
+            _m_mimic(_m_cnode_ptr_t src, Fn&& insert_fn)
             {
-                for (_M_hook_t at = 0; at < K; ++at)
+                for (_m_hook_t at = 0; at < K; ++at)
                 {
-                    _M_cnode_ptr_t cur = src->_M_children_array[at];
+                    _m_cnode_ptr_t cur = src->_m_children_array[at];
                     if (cur != nullptr)
                     {
                         insert_fn(at, this, cur); // assume that .hook_at will be called
-                        assert(this->_M_children_array[at] != nullptr);
-                        this->_M_children_array[at]->_M_mimic(cur, std::forward<Fn>(insert_fn));
+                        assert(this->_m_children_array[at] != nullptr);
+                        this->_m_children_array[at]->_m_mimic(cur, std::forward<Fn>(insert_fn));
                     }
                 }
             }
@@ -148,87 +148,87 @@ namespace tl
 
 
         template <std::size_t K>
-        struct _K_Node
-            : public _K_Node_Base<_K_Node<K>, K>
+        struct _k_node
+            : public _k_node_base<_k_node<K>, K>
         { 
             constexpr
-            _K_Node() = default;
+            _k_node() = default;
         };
 
         template <std::size_t K>
-        struct _Parent_K_Node
-            : public _Parent_Node_Base<_K_Node_Base<_Parent_K_Node<K>, K>>
+        struct _bidirectional_k_node
+            : public _bidirectional_node_base<_k_node_base<_bidirectional_k_node<K>, K>>
         { 
-            using _M_base_t = _Parent_Node_Base<_K_Node_Base<_Parent_K_Node<K>, K>>;
-            using typename _M_base_t::_M_node_t;
-            using typename _M_base_t::_M_node_ptr_t;
-            using typename _M_base_t::_M_cnode_ptr_t;
+            using _m_base_t = _bidirectional_node_base<_k_node_base<_bidirectional_k_node<K>, K>>;
+            using typename _m_base_t::_m_node_t;
+            using typename _m_base_t::_m_node_ptr_t;
+            using typename _m_base_t::_m_cnode_ptr_t;
 
             constexpr
-            _Parent_K_Node() = default;
+            _bidirectional_k_node() = default;
 
             constexpr bool
-            _M_is_last()
+            _m_is_last()
                 const noexcept
             {
-                assert(!this->_M_is_root());
-                return this->_M_get_parent()->_M_children_array.back() == this;
+                assert(!this->_m_is_root());
+                return this->_m_get_parent()->_m_children_array.back() == this;
             }
 
             constexpr bool
-            _M_is_first()
+            _m_is_first()
                 const noexcept
             {
-                assert(!this->_M_is_root());
-                return this->_M_get_parent()->_M_children_array.front() == this;
+                assert(!this->_m_is_root());
+                return this->_m_get_parent()->_m_children_array.front() == this;
             }
 
-            constexpr _M_node_ptr_t
-            _M_next_sibling()
+            constexpr _m_node_ptr_t
+            _m_next_sibling()
                 noexcept
             {
-                if (this->_M_is_root() || this->_M_is_last())
+                if (this->_m_is_root() || this->_m_is_last())
                     return nullptr;
                 // calculate offset of this node to get to it's position
                 // in the child_array of the parent-node
-                std::ptrdiff_t _off = this - this->_M_get_parent()->_M_child_array.cdata();
-                return this->_M_get_parent()->_M_child_array[_off + 1];
+                std::ptrdiff_t _off = this - this->_m_get_parent()->_m_child_array.cdata();
+                return this->_m_get_parent()->_m_child_array[_off + 1];
             }
 
-            constexpr _M_cnode_ptr_t
-            _M_next_sibling()
+            constexpr _m_cnode_ptr_t
+            _m_next_sibling()
                 const noexcept
             {
-                if (this->_M_is_root() || this->_M_is_last())
+                if (this->_m_is_root() || this->_m_is_last())
                     return nullptr;
                 // calculate offset of this node to get to it's position
                 // in the child_array of the parent-node
-                std::ptrdiff_t _off = this - this->_M_get_parent()->_M_child_array.cdata();
-                return this->_M_get_parent()->_M_child_array[_off + 1];
+                std::ptrdiff_t _off = this - this->_m_get_parent()->_m_child_array.cdata();
+                return this->_m_get_parent()->_m_child_array[_off + 1];
             }
 
-            constexpr _M_node_ptr_t
-            _M_prev_sibling()
+            constexpr _m_node_ptr_t
+            _m_prev_sibling()
                 noexcept
             {
-                if (this->_M_is_root() || this->_M_is_first())
+                if (this->_m_is_root() || this->_m_is_first())
                     return nullptr;
                 // calculate offset of this node to get to it's position
                 // in the child_array of the parent-node
-                std::ptrdiff_t _off = this - this->_M_get_parent()->_M_child_array.cdata();
-                return this->_M_get_parent()->_M_child_array[_off - 1];
+                std::ptrdiff_t _off = this - this->_m_get_parent()->_m_child_array.cdata();
+                return this->_m_get_parent()->_m_child_array[_off - 1];
             }
 
-            constexpr _M_cnode_ptr_t
-            _M_prev_sibling()
+            constexpr _m_cnode_ptr_t
+            _m_prev_sibling()
                 const noexcept
             {
-                if (this->_M_is_root() || this->_M_is_first())
+                if (this->_m_is_root() || this->_m_is_first())
                     return nullptr;
                 // calculate offset of this node to get to it's position
                 // in the child_array of the parent-node
-                std::ptrdiff_t _off = this - this->_M_get_parent()->_M_child_array.cdata();
-                return this->_M_get_parent()->_M_child_array[_off - 1];
+                std::ptrdiff_t _off = this - this->_m_get_parent()->_m_child_array.cdata();
+                return this->_m_get_parent()->_m_child_array[_off - 1];
             }
         };
 
@@ -238,31 +238,15 @@ namespace tl
     template <typename T, 
               std::size_t K,
               typename Allocator = std::allocator<T>>
-    class outward_k_tree
-        : public detail::_Outward_Tree_Base<detail::_K_Node<K>, Allocator>
-    { 
-    protected:
-        using _M_base_t = detail::_Outward_Tree_Base<detail::_K_Node<K>, Allocator>;
-
-    public:
-        
-        using _M_base_t::_M_base_t;
-    };
+    using outward_k_tree 
+        = detail::_root_outward_tree<detail::_k_node<K>, Allocator>;
 
 
     template <typename T, 
               std::size_t K,
               typename Allocator = std::allocator<T>>
-    class k_tree
-        : public detail::_Tree_Base<detail::_Parent_K_Node<K>, Allocator>
-    {
-    protected:
-        using _M_base_t = detail::_Tree_Base<detail::_Parent_K_Node<K>, Allocator>;
-
-    public:
-        
-        using _M_base_t::_M_base_t;
-    };
+    using k_tree 
+        = detail::_root_outward_tree<detail::_bidirectional_k_node<K>, Allocator>;
 
 }
 

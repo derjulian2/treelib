@@ -37,472 +37,424 @@ namespace tl
 {
     namespace detail
     {  
-        template <typename _ValueT,
-                  typename _NodeT, 
-                  typename _IterT>
-        class _Iter_Base
+        /***************************************************
+         * @brief CRTP-base-class for common functionality
+         *        of tree-iterators. supplies iterator-member-types,
+         *        post-increment/decrement and dereferencing.
+         ***************************************************/
+        template <bool IsConst,
+                  typename ValueT,
+                  typename NodeT,
+                  typename IterT>
+        class _basic_iter_mixin
+            : public IterT
         {
-        public:
-        
-            using iterator_category = std::bidirectional_iterator_tag;
-            using difference_type   = std::ptrdiff_t;
-            using value_type        = _ValueT;
-            using pointer           = value_type*;
-            using const_pointer     = const value_type*;
-            using reference         = value_type&;
-            using const_reference   = const value_type&;
-
         protected:
 
-            using _M_iter_t = _IterT;
-            using _M_ptr_t  = _M_iter_t*;
+            template <typename T>
+            using _m_maybe_const_t = std::conditional_t<IsConst, const T, T>;
 
-            using _M_node_t       = _NodeT;
-            using _M_node_ptr_t   = _M_node_t*;
-            using _M_cnode_ptr_t  = const _M_node_t*;
-            using _M_value_node_t = detail::_Value_Node<_M_node_t, value_type>;
-            using _M_vnode_ptr_t  = _M_value_node_t*;
+            using _m_iter_t       = IterT;
+            using _m_value_t      = ValueT;
+            using _m_node_t       = NodeT;
+            using _m_node_ptr_t   = _m_node_t*;
+            using _m_cnode_ptr_t  = const _m_node_t*;
+            using _m_value_node_t = detail::_value_node<_m_node_t, _m_value_t>;
+            using _m_vnode_ptr_t  = _m_value_node_t*;
 
-            _M_node_ptr_t _M_node;
+            constexpr _m_iter_t*
+            _m_iter()
+                noexcept
+            { return static_cast<_m_iter_t*>(this); }
 
-            constexpr _M_ptr_t
-            _M_iter()
-            { return static_cast<_M_ptr_t>(this); }
+            constexpr const _m_iter_t*
+            _m_iter()
+                const noexcept
+            { return static_cast<const _m_iter_t*>(this); }
 
-            constexpr _M_node_ptr_t
-            _M_cur()
-            { return this->_M_iter()->_M_cur(); }
+            constexpr _m_node_ptr_t
+            _m_cur()
+                const
+            { return this->_m_iter()->_m_cur(); }
 
-            constexpr
-            _Iter_Base()
-                : _M_node(nullptr)
-            { }
+            constexpr void
+            _m_set_node(_m_node_ptr_t _node)
+            {
+                this->_m_iter()->_m_set_node(_node);
+            }
 
-            constexpr
-            _Iter_Base(_M_node_ptr_t _node)
-                : _M_node(_node)
-            { }
+            friend _m_iter_t;
+            friend class _node_traits<_m_node_t>;
 
-            friend _M_iter_t;
-            friend class _Node_Traits<_M_node_t>;
+            template <bool, typename, typename, typename>
+            friend class _basic_iter_mixin;
 
         public:
 
-            // temporary i swear
+            using _m_iter_t::_m_iter_t;
 
-            constexpr
-            operator _M_node_ptr_t()
-            { return this->_M_cur(); }
+            using iterator_category = std::bidirectional_iterator_tag;
+            using difference_type   = std::ptrdiff_t;
+            using value_type        = _m_value_t;
+            using pointer           = _m_maybe_const_t<value_type>*;
+            using const_pointer     = const value_type*;
+            using reference         = _m_maybe_const_t<value_type>&;
+            using const_reference   = const value_type&;
 
-            constexpr
-            operator _M_cnode_ptr_t()
-                const
-            { return this->_M_cur(); }
+            /***************************************************
+             * @brief constructor (1).
+             *        always constructible from mutable iterator.
+             *        
+             * @details note that the derived-iterator-type is also
+             *          a template-variable, because iterators of
+             *          the same node-type of any kind (queued/
+             *          traversing/leaf/sibling) should all be
+             *          convertible to each other, if the constness
+             *          allows it.
+             ***************************************************/
+            template <bool OtherIsConst, typename OtherIterT>
+                // either this is const, or both are mutable
+                requires (IsConst || !OtherIsConst)
+            _basic_iter_mixin(const _basic_iter_mixin<OtherIsConst, _m_value_t, _m_node_t, OtherIterT>& other)
+            { 
+                this->_m_set_node(other._m_cur());
+            }
 
-            template <typename _OtherValueT>
-                requires std::same_as<std::decay_t<_ValueT>, std::decay_t<_OtherValueT>>
-            friend 
-            constexpr bool
-            operator==(const _Iter_Base& a, const _Iter_Base& b)
+            /***************************************************
+             * @brief compare two iterators based on their
+             *        current node.
+             *
+             * @details note that the derived-iterator-type is also
+             *          a template-variable, because iterators of
+             *          the same node-type of any kind (queued/
+             *          traversing/leaf/sibling) should all be
+             *          convertible to each other, if the constness
+             *          allows it.
+             ***************************************************/
+            template <bool OtherIsConst, typename OtherIterT>
+            [[nodiscard]]
+            friend constexpr bool
+            operator==(const _basic_iter_mixin& a, 
+                       const _basic_iter_mixin<OtherIsConst, _m_value_t, _m_node_t, OtherIterT>& b)
                 noexcept
-            { return a._M_cur() == b._M_cur(); }
+            { return a._m_cur() == b._m_cur(); }
 
+            [[nodiscard]]
             constexpr reference 
             operator*()
+                const // noexcept(TREELIB_NO_EXCEPTIONS)
             {
             #ifdef TREELIB_NO_EXCEPTIONS
-                assert(this->_M_cur() != nullptr)
+                assert(this->_m_cur() != nullptr)
             #else
-                if (this->_M_cur() == nullptr)
+                if (this->_m_cur() == nullptr)
                     throw std::out_of_range("cannot dereference end-iterator");
-                return static_cast<_M_vnode_ptr_t>(this->_M_cur())->_M_get_value();
+                return static_cast<_m_vnode_ptr_t>(this->_m_cur())->_m_get_value();
             #endif
             }
 
+            [[nodiscard]]
             constexpr pointer 
             operator->()
+                const // noexcept(TREELIB_NO_EXCEPTIONS)
             {
             #ifdef TREELIB_NO_EXCEPTIONS
-                assert(this->_M_cur() != nullptr)
+                assert(this->_m_cur() != nullptr)
             #else
-                if (this->_M_cur() == nullptr)
-                    throw std::out_of_range("invalid iterator-dereference");
-                return std::addressof(static_cast<_M_vnode_ptr_t>(this->_M_cur())->_M_get_value());
+                if (this->_m_cur() == nullptr)
+                    throw std::out_of_range("cannot dereference end-iterator");
+                return std::addressof(static_cast<_m_vnode_ptr_t>(this->_m_cur())->_m_get_value());
             #endif
             }
 
-            constexpr _M_iter_t
+            using _m_iter_t::operator++;
+            using _m_iter_t::operator--;
+
+            constexpr _m_iter_t
             operator++(int)
             {
-                _M_iter_t _tmp = *this;
-                ++(*this->_M_iter());
+                _m_iter_t _tmp = *this;
+                ++(*this->_m_iter());
                 return _tmp;
             }
 
-            constexpr _IterT
+            constexpr _m_iter_t
             operator--(int)
             { 
-                _M_iter_t _tmp = *this;
-                --(*this->_M_iter());
+                _m_iter_t _tmp = *this;
+                --(*this->_m_iter());
                 return _tmp;
             }
         };
-    }
-    
-    template <typename NodeType>
-    struct node_info
-    {
-        using node_type = NodeType;
 
-        // node_info(detail::_Iter_Base<node_type>& iter)
-        // { }
         
-    };
-
-    template <typename NodeType>
-    struct leaf_iterator
-    {
-
-    };
-
-    template <typename NodeType>
-    struct child_iterator
-    {
-
-    };
-
-    // template <typename ValueType, typename NodeType>
-    // class traversing_iterator
-    // {
-    // public:
-    //     using node_traits  = tl::_Node_Traits<NodeType>;
-    //     using node_type    = typename node_traits::node_type;
-    //     using node_pointer = typename node_traits::pointer;
-    //     using value_type   = ValueType;
-    //     using pointer      = value_type*;
-    //     using reference    = value_type&;
-
-    //     operator node_pointer();
-
-    //     friend 
-    //     constexpr bool
-    //     operator==(const traversing_iterator&, const traversing_iterator&);
-
-    //     reference operator*();
-    //     pointer operator->();
-    //     traversing_iterator& operator++();
-    // };
-
-    enum struct traversal_strategy
-    {
-        depth_first_pre_order,
-        depth_first_post_order,
-        breadth_first_in_order,
-        breadth_first_reverse_order
-    };
-
-
-    /**
-     * @brief traversal-type to be used in tl::queued_iterator
-     *        and tl::iterator when the iteration-strategy
-     *        is dependent on a runtime-condition.
-     *
-     *        dispatches the .next()-calls based on the
-     *        value of a 'strategy'-member-field.
-     */
-    template <typename NodeType>
-    struct dynamic_traversal
-    {
-        traversal_strategy m_strategy;
-    };
-
-
-    /**
-     * @brief requirements for types that provide the 
-     *        traversing-algorithms to be used in queued-iterators.
-     */
-    template <typename T>
-    concept queued_traversal_provider = requires ()
-    {
-        typename T::node_type;
-        { T::enqueue(std::declval<typename T::node_type&>()) } 
-        -> std::convertible_to<typename T::node_pointer>;
-    };
-
-
-    /**
-    * @brief requirements for types that provide the 
-     *       traversing-algorithms to be used in traversing-iterators.
-     */
-    template <typename T>
-    concept iterative_traversal_provider = requires ()
-    {
-        typename T::node_type;
-        { T::next(std::declval<typename T::node_type&>()) } 
-        -> std::convertible_to<typename T::node_pointer>;
-        { T::prev(std::declval<typename T::node_type&>()) } 
-        -> std::convertible_to<typename T::node_pointer>;
-    };
-
-
-    template <typename ValueType, 
-              typename TraversalType>
-    class queued_iterator
-        : public detail::_Iter_Base<ValueType, 
-                                    typename TraversalType::node_type, 
-                                    queued_iterator<ValueType, TraversalType>>
-    {
-    public:
-
-        using traversal_type  = TraversalType;  
-
-    protected:
-
-        using _M_base_t = detail::_Iter_Base<ValueType, typename TraversalType::node_type, queued_iterator<ValueType, TraversalType>>;
-        using typename _M_base_t::_M_node_t;
-        using typename _M_base_t::_M_node_ptr_t;
-
-        using _M_queue_t      = std::deque<_M_node_ptr_t>;
-        using _M_queue_iter_t = typename _M_queue_t::iterator;
-
-        _M_queue_t      _M_queue;
-        _M_queue_iter_t _M_queue_iter;
-
-        friend _M_base_t;
-
-        template <typename, typename>
-        friend class queued_iterator;
-
-        constexpr _M_node_ptr_t 
-        _M_cur()
-            noexcept
-        { 
-            return 
-                // queue is empty, regard the 'source' as
-                // the current-node.
-                this->_M_queue.empty()
-                    ? this->_M_node
-                    :
-                    // reached end of queue-iteration, which
-                    // requires this iterator to compare equal
-                    // to 'tree.end()', which is 'iterator(nullptr)' 
-                    this->_M_queue_iter == this->_M_queue.end()
-                        ? nullptr
-                        : *this->_M_queue_iter
-                    ;      
-        }
-
-        constexpr void
-        _M_enqueue()
+        /***************************************************
+         * @brief traversal-type for depth-first-pre-order.
+         ***************************************************/
+        template <typename NodeT>
+        struct _depth_first_pre_order
         {
-            this->_M_queue      = traversal_type::enqueue(this->_M_node);
-            this->_M_queue_iter = std::ranges::begin(this->_M_queue);
-        }
+            using _m_node_t = NodeT;
+            using _m_node_traits_t = _node_traits<_m_node_t>;
 
-        constexpr bool
-        _M_should_enqueue()
-            const noexcept
-        {
-            return this->_M_queue_iter == _M_queue_iter_t();
-        }
+            using _m_node_ptr_t = typename _m_node_traits_t::_m_ptr_t;
 
-        constexpr
-        explicit queued_iterator(_M_node_ptr_t _node)
-            : _M_base_t(_node)
-            , _M_queue()
-            , _M_queue_iter()
-        { }
-
-        friend detail::_Node_Traits<_M_node_t>;
-
-    public:
-
-        constexpr
-        queued_iterator()
-            : _M_base_t()
-            , _M_queue()
-            , _M_queue_iter()
-        { }
-
-        constexpr
-        queued_iterator(const queued_iterator&)
-            = default;
-
-        /**
-         * allow construction from const-iterators
-         * as well as from iterators with a different
-         * traversal-type (but with the same node-type).
-         */
-        template <typename OtherValueType, typename OtherTraversalType>
-            requires (std::same_as<typename traversal_type::node_type, 
-                                   typename OtherTraversalType::node_type>
-                    // either self is const or other is non-const. 
-                    && (std::same_as<std::decay_t<ValueType>, std::decay_t<OtherValueType>>)
-                    && (std::is_const_v<ValueType> || !std::is_const_v<OtherValueType>))
-        constexpr
-        queued_iterator(const queued_iterator<OtherValueType, OtherTraversalType>& other)
-            : _M_base_t(other._M_node)
-            , _M_queue(other._M_queue)
-            , _M_queue_iter(other._M_queue_iter)
-        { }
-
-        constexpr void
-        refresh()
-        { this->_M_enqueue(); }
-
-        constexpr queued_iterator& 
-        operator++()
-        { 
-            if (this->_M_should_enqueue())
-            { this->_M_enqueue(); }
-            ++this->_M_queue_iter;
-            return *this;
-        }
-
-        constexpr queued_iterator& 
-        operator--()
-        { 
-            if (this->_M_should_enqueue())
-            { this->_M_enqueue(); }
-            --this->_M_queue_iter;
-            return *this; 
-        }
-    };
-
-
-    template <typename NodeType>
-    struct depth_first_pre_order
-    {
-        using node_traits  = tl::detail::_Node_Traits<NodeType>;
-        using node_type    = typename node_traits::_M_node_t;
-        using node_pointer = typename node_traits::_M_ptr_t;
-
-        /**
-         * @brief constructs an iterable sequence of node-pointers
-         *        that when iterated over represents the
-         *        depth-first-pre-order traversal of the underlying tree.
-         */
-        template <typename ResultType = std::deque<node_pointer>,
-                  typename SequenceType = std::deque<node_pointer>>
-        static constexpr 
-        ResultType
-        enqueue(node_pointer src)
-        {
-            ResultType result;
-            std::stack<node_pointer, SequenceType> stack;
-            
-            stack.push(src);
-            while (!stack.empty())
+            /***************************************************
+             * @brief   expands the node pointed to by '_first'
+             *          to it's children and inserts them
+             *          just after '_first', forming the depth-
+             *          first-traversal, node-by-node.
+             ***************************************************/
+            static constexpr void
+            _s_expand_queue(std::deque<_m_node_ptr_t>::iterator _first,
+                            std::deque<_m_node_ptr_t>& _queue)
             {
-                node_pointer cur = stack.top();
-                result.push_back(cur);
-                stack.pop();
+                if (_queue.empty())
+                    return;
 
-                // go over children in reverse order here
-                // because the top of the stack will actually
-                // have the last child otherwise.
-                for (node_pointer& c 
-                     : node_traits::_S_children(cur)
-                     | std::views::reverse)
-                    stack.push(c);
+                for (_m_node_ptr_t& _child :
+                     _m_node_traits_t::_s_children(*_first))
+                    // 'drag' the iterator one down after each insert,
+                    // so the order doesn't get reversed
+                    _first = _queue.insert(std::next(_first), _child);
             }
-            return result;
-        }
+        };
 
-        static constexpr node_pointer
-        next(node_pointer node)
-            requires detail::_Is_Parent_Node<node_type>
+
+        /***************************************************
+         * @brief traversal-type for breadth-first-in-order.
+         ***************************************************/
+        template <typename NodeT>
+        struct _breadth_first_in_order
         {
-            if (node_traits::_S_is_leaf(node))
+            using _m_node_t = NodeT;
+            using _m_node_traits_t = _node_traits<_m_node_t>;
+
+            using _m_node_ptr_t = typename _m_node_traits_t::_m_ptr_t;
+
+            /***************************************************
+             * @brief   expands the node pointed to by '_first'
+             *          to it's children and inserts them
+             *          at the back of the queue, forming the 
+             *          breadth-first-traversal, node-by-node.
+             ***************************************************/
+            static constexpr void
+            _s_expand_queue(std::deque<_m_node_ptr_t>::iterator _first,
+                            std::deque<_m_node_ptr_t>& _queue)
             {
+                if (_queue.empty())
+                    return;
 
+                for (_m_node_ptr_t& _child :
+                     _m_node_traits_t::_s_children(*_first))
+                    _queue.push_back(_child);
             }
-            return *std::ranges::begin(node_traits::_S_children(node));
-        }
+        };
 
-        static constexpr node_pointer
-        prev(node_pointer node)
-            requires detail::_Is_Parent_Node<node_type>
+
+        template <typename NodeT>
+        struct _breadth_first_reverse_order
         {
 
-        }
-    };
+        };
 
-    //     /**
-    //  *
-    //  */
-    // template <typename NodeType>
-    // struct breadth_first_in_order
-    // {
-    //     using node_traits  = tl::_Node_Traits<NodeType>;
-    //     using node_type    = typename node_traits::node_type;
-    //     using node_pointer = typename node_traits::pointer;
+        template <typename NodeT>
+        struct _node_info
+        {
+            using node_type = NodeT;
 
-    //     /**
-    //      * @brief constructs an iterable sequence of node-pointers
-    //      *        that when iterated over represents the
-    //      *        depth-first-pre-order traversal of the underlying tree.
-    //      */
-    //     template <node_kind NodeKind,
-    //               typename ContainerType,
-    //               typename SequenceType = std::deque<node_pointer>>
-    //     static constexpr 
-    //     void
-    //     enqueue(std::back_insert_iterator<ContainerType> dest,
-    //             node_pointer root)
-    //     {
-    //         std::queue<node_pointer, SequenceType> queue;
+            // node_info(detail::_Iter_Base<node_type>& iter)
+            // { }
             
-    //         queue.push(root);
-    //         while (!queue.empty())
-    //         {
-    //             node_pointer& cur = queue.front();
-    //             *dest = cur;
-    //             queue.pop();
+        };
 
-    //             for (node_pointer& c 
-    //                  : node_traits::template neighbours<NodeKind>(*cur))
-    //             { queue.push(c); }
-    //         }
-    //     }
-    // };
+        template <typename ValueT,
+                  typename NodeT>
+        struct _leaf_iterator
+        {
 
+        };
+
+        template <typename ValueT,
+                  typename NodeT>
+        struct _child_iterator
+        {
+
+        };
+
+        template <typename ValueT,
+                  typename TraversalT>
+        struct _traversing_iterator
+        {
+
+        };
+
+        template <bool IsConst,
+                  typename ValueT,
+                  typename TraversalT,
+                  typename IterT>
+        class _queued_iterator_base
+        {
+        protected:
+    
+            using _m_iter_t     = IterT;
+            using _m_trav_t     = TraversalT;
+            using _m_node_t     = typename _m_trav_t::_m_node_t;
+            using _m_node_ptr_t = _m_node_t*;
+            using _m_value_t    = ValueT;
+
+            using _m_queue_t      = std::deque<_m_node_ptr_t>;
+            using _m_queue_iter_t = typename _m_queue_t::iterator;
+
+            _m_queue_t      _m_queue;
+            _m_queue_iter_t _m_queue_cur;
+            // keep track of furthest, so no requeue 
+            // happens when going backwards and then forwards again
+            _m_queue_iter_t _m_queue_furthest; 
+
+            template <bool, typename, typename, typename>
+            friend class _basic_iter_mixin;
+
+            constexpr _m_iter_t*
+            _m_iter()
+                noexcept
+            { return static_cast<_m_iter_t*>(this); }
+
+            constexpr _m_iter_t*
+            _m_iter()
+                const noexcept
+            { return static_cast<const _m_iter_t*>(this); }
+
+            constexpr _m_node_ptr_t 
+            _m_cur()
+                const noexcept
+            { 
+                return this->_m_queue_cur == this->_m_queue.end()
+                       ? nullptr
+                       : *this->_m_queue_cur;
+            }
+
+            constexpr void
+            _m_set_node(_m_node_ptr_t _node)
+            {
+                this->_m_queue.assign({_node});
+                this->_m_queue_cur = this->_m_queue_furthest = this->_m_queue.begin();
+            }
+
+            constexpr void
+            _m_enqueue_and_advance()
+            {
+                _m_trav_t::_s_expand_queue(this->_m_queue_cur, this->_m_queue);
+                this->_m_queue_furthest = ++this->_m_queue_cur;
+            }
+
+            constexpr bool
+            _m_should_enqueue()
+                const noexcept
+            {
+                return this->_m_queue_cur == this->_m_queue_furthest;
+            }
+
+            constexpr explicit
+            _queued_iterator_base(_m_node_ptr_t _node)
+                : _m_queue({_node})
+                , _m_queue_cur(_m_queue.begin())
+                , _m_queue_furthest(_m_queue.begin())
+            { }
+
+            friend detail::_node_traits<_m_node_t>;
+
+        public:
+
+            using traversal_type  = TraversalT;  
+
+            constexpr
+            _queued_iterator_base()
+                : _m_queue()
+                , _m_queue_cur(this->_m_queue.end())
+                , _m_queue_furthest(this->_m_queue.end())
+            { }
+
+            constexpr _m_iter_t& 
+            operator++()
+            { 
+                if (this->_m_should_enqueue())
+                    this->_m_enqueue_and_advance();
+                else 
+                    ++this->_m_queue_cur;
+                return *this->_m_iter();
+            }
+
+            constexpr _m_iter_t& 
+            operator--()
+            { 
+                --this->_m_queue_cur;
+                return *this->_m_iter(); 
+            }
+        };
+
+
+        template <bool IsConst,
+                  typename ValueT,
+                  typename TraversalT>
+        class _queued_iterator
+            : public _basic_iter_mixin<IsConst, 
+                                       ValueT,
+                                       typename TraversalT::_m_node_t,
+                                       _queued_iterator_base<IsConst, ValueT, TraversalT, _queued_iterator<IsConst, ValueT, TraversalT>>>
+        { 
+        protected:
+
+            using _m_base_t = _basic_iter_mixin<IsConst, 
+                                       ValueT,
+                                       typename TraversalT::_m_node_t,
+                                       _queued_iterator_base<IsConst, ValueT, TraversalT, _queued_iterator<IsConst, ValueT, TraversalT>>>;
+
+            friend class _node_traits<typename TraversalT::_m_node_t>;
+
+        public:
+
+            using _m_base_t::_m_base_t;
+        };
+
+        // template <typename NodeT>
+        // using _depth_first_pre_order_iterator 
+        //     = _traversing_iterator<_depth_first_pre_order<NodeT>>;
+
+        // template <typename NodeT>
+        // using _depth_first_pre_order_queued_iterator 
+        //     = _queued_iterator<_depth_first_pre_order<NodeT>>;
+
+        // template <typename NodeT>
+        // using _breadth_first_in_order_iterator 
+        //     = _traversing_iterator<_breadth_first_in_order<NodeT>>;
+
+        // template <typename NodeT>
+        // using _breadth_first_in_order_queued_iterator 
+        //     = _queued_iterator<_breadth_first_in_order<NodeT>>;
+    }
+
+    // template <typename TreeType>
+    // using depth_first_iterator 
+    //     = detail::_depth_first_pre_order_iterator<typename TreeType::node_type>;
+
+    // template <typename TreeType>
+    // using depth_first_queued_iterator 
+    //     = detail::_depth_first_pre_order_queued_iterator<typename TreeType::node_type>;
+
+    // template <typename TreeType>
+    // using breadth_first_iterator 
+    //     = detail::_breadth_first_in_order_iterator<typename TreeType::node_type>;
+
+    // template <typename TreeType>
+    // using breadth_first_queued_iterator 
+    //     = detail::_breadth_first_in_order_queued_iterator<typename TreeType::node_type>;
 
     // template <typename NodeType>
-    // struct breadth_first_reverse_order
-    // {
-    //     using node_traits  = tl::_Node_Traits<NodeType>;
-    //     using node_type    = typename node_traits::node_type;
-    //     using node_pointer = typename node_traits::pointer;
+    // using depth_first = depth_first_pre_order<NodeType>;
 
-    //     /**
-    //      * @brief constructs an iterable sequence of node-pointers
-    //      *        that when iterated over represents the
-    //      *        depth-first-pre-order traversal of the underlying tree.
-    //      */
-    //     template <node_kind NodeKind,
-    //               typename ContainerType,
-    //               typename SequenceType = std::deque<node_pointer>>
-    //     static constexpr 
-    //     void
-    //     enqueue(std::back_insert_iterator<ContainerType> dest,
-    //             node_pointer root)
-    //     {
-    //         std::queue<node_pointer, SequenceType> queue;
-            
-    //         queue.push(root);
-    //         while (!queue.empty())
-    //         {
-    //             node_pointer& cur = queue.front();
-    //             *dest = cur;
-    //             queue.pop();
-    //             for (node_pointer& c 
-    //                  : node_traits::template neighbours<NodeKind>(*cur)
-    //                  | std::views::reverse)
-    //             { queue.push(c); }
-    //         }
-    //     }
-    // };
+    // template <typename NodeType>
+    // using breadth_first = breadth_first_in_order<NodeType>;
 }
 
 #endif

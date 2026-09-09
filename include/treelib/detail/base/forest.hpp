@@ -13,7 +13,6 @@
  ***************************************************/
 
 #include <treelib/detail/base/node.hpp>
-#include <treelib/detail/base/alloc.hpp>
 
 namespace tl
 {

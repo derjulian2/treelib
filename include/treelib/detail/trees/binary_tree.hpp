@@ -7,7 +7,9 @@
  * @author Julian Benzel
  * @date   04.09.2026
  *
- * @brief  type-generic binary-tree.
+ * @brief  type-generic binary-tree, implemented
+ *         as a special-case for a k-tree with
+ *         the parameter k = 2.
  ***************************************************/
 
 #include <treelib/detail/trees/k_tree.hpp>
@@ -16,7 +18,7 @@ namespace tl
 {
     /*************************************************************
      * hacky scoped enum, because i want implicit conversions
-     * to std::size_t (the hook type of tl::k_tree), but also
+     * to std::size_t (the hook-type of tl::k_tree), but also
      * scoping-rules.
      *
      * Source - https://stackoverflow.com/a/46407792
@@ -26,33 +28,20 @@ namespace tl
 
     struct binary
     {
-        static constexpr std::size_t left = 0;
+        static constexpr std::size_t left  = 0;
         static constexpr std::size_t right = 1;
-    };
-
-
-    template <typename T, typename Allocator = std::allocator<T>>
-    struct outward_binary_tree
-        : public outward_k_tree<T, 2, Allocator>
-    { 
-        using _M_base_t = outward_k_tree<T, 2, Allocator>;
-
-    public:
-        
-        using _M_base_t::_M_base_t;
+    
+    protected:
+        binary() = default;
     };
 
     template <typename T, typename Allocator = std::allocator<T>>
-    struct binary_tree
-        : public k_tree<T, 2, Allocator>
-    { 
-        using _M_base_t = k_tree<T, 2, Allocator>;
+    using outward_binary_tree
+        = outward_k_tree<T, 2, Allocator>;
 
-    public:
-        
-        using _M_base_t::_M_base_t;
-    };
-
+    template <typename T, typename Allocator = std::allocator<T>>
+    using binary_tree
+        = k_tree<T, 2, Allocator>;
 } 
 
 #endif

@@ -48,7 +48,7 @@ namespace tl
          *          @see tl::detail::bidirectional_node for the node's with parent-pointers.
          *********************************************************************************/
         template <typename T>
-        concept _Is_Node
+        concept _is_node
             = std::default_initializable<T>
             && requires (T* t, const T* ct)
             {
@@ -70,11 +70,11 @@ namespace tl
                  *        node is sitting at one of it's recursion-
                  *        points and call unhook_at if so.
                  ***************************************************/
-                typename T::_M_hook_t;
-                { t->_M_hook_at(std::declval<typename T::_M_hook_t>(), t) };
-                { t->_M_unhook_at(std::declval<typename T::_M_hook_t>()) }
+                typename T::_m_hook_t;
+                { t->_m_hook_at(std::declval<typename T::_m_hook_t>(), t) };
+                { t->_m_unhook_at(std::declval<typename T::_m_hook_t>()) }
                     -> std::convertible_to<T*>;
-                { t->_M_unhook_if(t) };
+                { t->_m_unhook_if(t) };
                 
                 /***************************************************
                  * @brief accessors to all subtrees at the
@@ -84,15 +84,15 @@ namespace tl
                  *        a child-node @see tl::detail::vecrose_node as
                  *        an example.
                  ***************************************************/
-                { t->_M_children() }
+                { t->_m_children() }
                     -> std::ranges::range;
-                { ct->_M_children() }
+                { ct->_m_children() }
                     -> std::ranges::input_range;
             };
 
         template <typename T>
         concept _Is_Copyable_Node
-            = _Is_Node<T>
+            = _is_node<T>
             && requires(T* t, const T* ct)
             {
                 /***************************************************
@@ -114,7 +114,7 @@ namespace tl
                  *        allocation fails, the tree will remain in
                  *        a predictable state.
                  ***************************************************/
-                { t->_M_mimic(ct, [](typename T::_M_hook_t, T*, const T*) -> void { }) };
+                { t->_m_mimic(ct, [](typename T::_m_hook_t, T*, const T*) -> void { }) };
             };
 
         /***************************************************
@@ -124,18 +124,18 @@ namespace tl
          *        these will be the instances that will
          *        actually be allocated by a tree-container.
          ***************************************************/
-        template <typename _NodeT, typename _ValueT>
-            requires _Is_Node<_NodeT>
-        struct _Value_Node
-            : public _NodeT
+        template <typename NodeT, typename ValueT>
+            requires _is_node<NodeT>
+        struct _value_node
+            : public NodeT
         {
-            using _M_value_t = _ValueT;
-            using _M_ref_t   = _M_value_t&;
-            using _M_cref_t  = const _M_value_t&;
-            using _M_ptr_t   = _M_value_t*;
-            using _M_cptr_t  = const _M_value_t*;
+            using _m_value_t = ValueT;
+            using _m_ref_t   = _m_value_t&;
+            using _m_cref_t  = const _m_value_t&;
+            using _m_ptr_t   = _m_value_t*;
+            using _m_cptr_t  = const _m_value_t*;
         
-            _M_value_t _M_value;
+            _m_value_t _m_value;
 
             /***************************************************
              * @brief constructor (1).
@@ -144,9 +144,9 @@ namespace tl
 
             template <typename... Args>
             constexpr
-            _Value_Node(Args&&... args)
-                noexcept(std::is_nothrow_constructible_v<_M_value_t, Args...>)
-                : _M_value(std::forward<Args>(args)...)
+            _value_node(Args&&... args)
+                noexcept(std::is_nothrow_constructible_v<_m_value_t, Args...>)
+                : _m_value(std::forward<Args>(args)...)
             { }
 
             /***************************************************
@@ -154,16 +154,16 @@ namespace tl
              ***************************************************/
 
             [[nodiscard]]
-            constexpr _M_ref_t
-            _M_get_value()
+            constexpr _m_ref_t
+            _m_get_value()
                 noexcept
-            { return this->_M_value; }
+            { return this->_m_value; }
 
             [[nodiscard]]
-            constexpr _M_cref_t
-            _M_get_value()
+            constexpr _m_cref_t
+            _m_get_value()
                 const noexcept
-            { return this->_M_value; }
+            { return this->_m_value; }
         };
 
 
@@ -172,42 +172,42 @@ namespace tl
          *        passed node-base-type by an additional
          *        back-pointer to it's owning parent.
          ***************************************************/
-        template <typename _NodeBaseT>
-        struct _Parent_Node_Base
-            : public _NodeBaseT
+        template <typename NodeBaseT>
+        struct _bidirectional_node_base
+            : public NodeBaseT
         {
-            using _M_base_t      = _NodeBaseT;
-            using _M_node_t      = typename _M_base_t::_M_node_t;
-            using _M_node_ptr_t  = _M_node_t*;
-            using _M_cnode_ptr_t = const _M_node_t*;
+            using _m_base_t      = NodeBaseT;
+            using _m_node_t      = typename _m_base_t::_m_node_t;
+            using _m_node_ptr_t  = _m_node_t*;
+            using _m_cnode_ptr_t = const _m_node_t*;
 
-            _M_node_ptr_t _M_parent;
+            _m_node_ptr_t _m_parent;
 
             constexpr void
-            _M_reset()
-            { this->_M_parent = nullptr; } 
+            _m_reset()
+            { this->_m_parent = nullptr; } 
 
             /***************************************************
              * @brief since this is a CRTP-base-class,
              *        we can assume that casting itself to
-             *        to a _M_node_ptr_t is valid. 
+             *        to a _m_node_ptr_t is valid. 
              ***************************************************/
             
-            constexpr _M_node_ptr_t
-            _M_node_ptr()
+            constexpr _m_node_ptr_t
+            _m_node_ptr()
                 noexcept
-            { return static_cast<_M_node_ptr_t>(this); }
+            { return static_cast<_m_node_ptr_t>(this); }
 
-            constexpr _M_node_ptr_t
-            _M_node_ptr()
+            constexpr _m_node_ptr_t
+            _m_node_ptr()
                 const noexcept
-            { return static_cast<_M_cnode_ptr_t>(this); }
+            { return static_cast<_m_cnode_ptr_t>(this); }
 
-            using _M_hook_t = typename _M_base_t::_M_hook_t;
+            using _m_hook_t = typename _m_base_t::_m_hook_t;
 
         protected:
 
-            friend _M_node_t;
+            friend _m_node_t;
 
             /***************************************************
              * constructor (1).
@@ -227,79 +227,79 @@ namespace tl
              * his name is sam.
              ***************************************************/
             constexpr
-            _Parent_Node_Base()
-                : _M_base_t()
-                , _M_parent(nullptr)
+            _bidirectional_node_base()
+                : _m_base_t()
+                , _m_parent(nullptr)
             { }
 
         public:
                 
-            constexpr _M_node_ptr_t
-            _M_get_parent() 
+            constexpr _m_node_ptr_t
+            _m_get_parent() 
                 noexcept
-            { return this->_M_parent; }
+            { return this->_m_parent; }
 
 
-            constexpr _M_cnode_ptr_t
-            _M_get_parent()
+            constexpr _m_cnode_ptr_t
+            _m_get_parent()
                 const noexcept
-            { return this->_M_parent; }
+            { return this->_m_parent; }
 
 
             constexpr bool
-            _M_is_root()
+            _m_is_root()
                 const noexcept
-            { return this->_M_parent == nullptr; }
+            { return this->_m_parent == nullptr; }
 
 
             constexpr void
-            _M_hook_at(_M_hook_t _at, _M_node_ptr_t _node)
+            _m_hook_at(_m_hook_t _at, _m_node_ptr_t _node)
             {
-                this->_M_base_t::hook_at(_at, _node);
-                _node->_M_parent = this->_M_node_ptr();
+                this->_m_base_t::hook_at(_at, _node);
+                _node->_m_parent = this->_m_node_ptr();
             }
 
-            constexpr _M_node_ptr_t
-            _M_unhook_at(_M_hook_t _at)
+            constexpr _m_node_ptr_t
+            _m_unhook_at(_m_hook_t _at)
             {
-                _M_node_ptr_t _res = this->_M_base_t::_M_unhook_at(_at);
-                _res->_M_parent = nullptr;
+                _m_node_ptr_t _res = this->_m_base_t::_m_unhook_at(_at);
+                _res->_m_parent = nullptr;
                 return _res;
             }
 
             constexpr void
-            _M_unhook_if(_M_node_ptr_t _node)
+            _m_unhook_if(_m_node_ptr_t _node)
             {
-                this->_M_base_t::unhook_if(_node);
-                _node->_M_parent = nullptr;
+                this->_m_base_t::unhook_if(_node);
+                _node->_m_parent = nullptr;
             }
 
             constexpr void
-            _M_unhook()
+            _m_unhook()
             {
-                this->_M_parent->_M_base_t::_M_unhook_if(this);
-                this->_M_parent = nullptr;
+                this->_m_parent->_m_base_t::_m_unhook_if(this);
+                this->_m_parent = nullptr;
             }
 
         };
 
         template <typename T>
-        concept _Is_Parent_Node
+        concept _is_parent_node
             = requires(T* t, const T* ct)
             {
-                { t->_M_unhook() };
-                { t->_M_get_parent() }
+                { t->_m_unhook() };
+                { t->_m_get_parent() }
                     -> std::convertible_to<T*>;
-                { ct->_M_get_parent() }
+                { ct->_m_get_parent() }
                     -> std::convertible_to<const T*>;
-                { ct->_M_is_root() };
-                { t->_M_next_sibling() }
+                { ct->_m_is_root() };
+                { t->_m_next_sibling() }
                     -> std::convertible_to<T*>;
-                { ct->_M_next_sibling() }
+                { ct->_m_next_sibling() }
                     -> std::convertible_to<const T*>;
-                { t->_M_prev_sibling() }
+                { t->_m_prev_sibling() }
                     -> std::convertible_to<T*>;
-                { ct->_M_prev_sibling() }
+                { ct->_m_prev_sibling() }
                     -> std::convertible_to<const T*>;
             };
 
@@ -308,78 +308,110 @@ namespace tl
          *        interface for every type satisying the
          *        requirements for a tree-node.
          ***************************************************/
-        template <typename _NodeT>
-            requires _Is_Node<_NodeT>
-        struct _Node_Traits
+        template <typename NodeT>
+            requires _is_node<NodeT>
+        struct _node_traits
         {
-            using _M_node_t = _NodeT;
-            using _M_ptr_t  = _M_node_t*;
-            using _M_cptr_t = const _M_node_t*;
-            using _M_ref_t  = _M_node_t&;
-            using _M_cref_t = const _M_node_t&;
+            using _m_node_t = NodeT;
+            using _m_ptr_t  = _m_node_t*;
+            using _m_cptr_t = const _m_node_t*;
+            using _m_ref_t  = _m_node_t&;
+            using _m_cref_t = const _m_node_t&;
 
-            using _M_hook_t = _M_node_t::_M_hook_t;
+            using _m_hook_t = _m_node_t::_m_hook_t;
 
-
-            static constexpr void
-            _S_hook_at(_M_ptr_t _parent, _M_hook_t _at, _M_ptr_t _node)
-            { _parent->_M_hook_at(_at, _node); }
-
-            static constexpr _M_ptr_t
-            _S_unhook_at(_M_ptr_t _parent, _M_hook_t _at)
-            { return _parent->_M_unhook_at(_at); }
 
             static constexpr void
-            _S_unhook_if(_M_ptr_t _parent, _M_ptr_t _node)
-            { _parent->_M_unhook_if(_node); }
+            _s_hook_at(_m_ptr_t _parent, _m_hook_t _at, _m_ptr_t _node)
+            { _parent->_m_hook_at(_at, _node); }
+
+            static constexpr _m_ptr_t
+            _s_unhook_at(_m_ptr_t _parent, _m_hook_t _at)
+            { return _parent->_m_unhook_at(_at); }
+
+            static constexpr void
+            _s_unhook_if(_m_ptr_t _parent, _m_ptr_t _node)
+            { _parent->_m_unhook_if(_node); }
 
             static constexpr decltype(auto)
-            _S_children(_M_ptr_t _node)
-            { return _node->_M_children(); }
+            _s_children(_m_ptr_t _node)
+            { return _node->_m_children(); }
 
             static constexpr decltype(auto)
-            _S_children(_M_cptr_t _node)
-            { return _node->_M_children(); }
+            _s_children(_m_cptr_t _node)
+            { return _node->_m_children(); }
 
             template <typename Fn>
-                requires std::invocable<Fn, _M_hook_t, _M_ptr_t, _M_cptr_t>
+                requires std::invocable<Fn, _m_hook_t, _m_ptr_t, _m_cptr_t>
             constexpr void
-            _S_mimic(_M_ptr_t _node, _M_cptr_t _src, Fn&& _insert_fn)
-            { _node->_M_mimic(_src, std::forward<Fn>(_insert_fn)); }
+            _s_mimic(_m_ptr_t _node, _m_cptr_t _src, Fn&& _insert_fn)
+            { _node->_m_mimic(_src, std::forward<Fn>(_insert_fn)); }
 
             static constexpr bool
-            _S_is_leaf(_M_cptr_t _node)
-            { return std::ranges::empty(_node->_M_children()); }
+            _s_is_leaf(_m_cptr_t _node)
+            { return std::ranges::empty(_node->_m_children()); }
 
-            template <typename _IterT>
-            static constexpr _IterT 
-            _S_to_iter(_M_ptr_t _node)
-            { return _IterT(_node); }
+            template <typename IterT>
+            static constexpr IterT 
+            _s_to_iter(_m_ptr_t _node)
+            { return IterT(_node); }
 
-            template <typename _IterT>
-            static constexpr _M_ptr_t 
-            _S_from_iter(_IterT&& _iter)
-            { return _iter->_M_cur(); }
+            template <typename IterT>
+            static constexpr _m_ptr_t 
+            _s_from_iter(const IterT& _iter)
+            { return _iter._m_cur(); }
 
-            static constexpr _M_ptr_t
-            _S_next_sibling(_M_ptr_t _node)
-                requires _Is_Parent_Node<_M_node_t>
-            { return _node->_M_next_sibling(); }
+            static constexpr _m_ptr_t
+            _s_next_sibling(_m_ptr_t _node)
+                requires _is_parent_node<_m_node_t>
+            { return _node->_m_next_sibling(); }
 
-            static constexpr _M_cptr_t
-            _S_next_sibling(_M_cptr_t _node)
-                requires _Is_Parent_Node<_M_node_t>
-            { return _node->_M_next_sibling(); }
+            static constexpr _m_cptr_t
+            _s_next_sibling(_m_cptr_t _node)
+                requires _is_parent_node<_m_node_t>
+            { return _node->_m_next_sibling(); }
 
-            static constexpr _M_ptr_t
-            _S_prev_sibling(_M_ptr_t _node)
-                requires _Is_Parent_Node<_M_node_t>
-            { return _node->_M_prev_sibling(); }
+            static constexpr _m_ptr_t
+            _s_prev_sibling(_m_ptr_t _node)
+                requires _is_parent_node<_m_node_t>
+            { return _node->_m_prev_sibling(); }
 
-            static constexpr _M_cptr_t
-            _S_prev_sibling(_M_cptr_t _node)
-                requires _Is_Parent_Node<_M_node_t>
-            { return _node->_M_prev_sibling(); }
+            static constexpr _m_cptr_t
+            _s_prev_sibling(_m_cptr_t _node)
+                requires _is_parent_node<_m_node_t>
+            { return _node->_m_prev_sibling(); }
+
+            static constexpr _m_ptr_t
+            _s_first_child(_m_ptr_t _node)
+            {
+                if (_s_is_leaf(_node))
+                    return nullptr;
+                return *std::ranges::begin(_s_children(_node));
+            }
+
+            static constexpr _m_cptr_t
+            _s_first_child(_m_cptr_t _node)
+            {
+                if (_s_is_leaf(_node))
+                    return nullptr;
+                return *std::ranges::begin(_s_children(_node));
+            }
+
+            static constexpr _m_ptr_t
+            _s_last_child(_m_ptr_t _node)
+            {
+                if (_s_is_leaf(_node))
+                    return nullptr;
+                return *(std::ranges::end(_s_children(_node)) - 1);
+            }
+
+            static constexpr _m_cptr_t
+            _s_last_child(_m_cptr_t _node)
+            {
+                if (_s_is_leaf(_node))
+                    return nullptr;
+                return *(std::ranges::end(_s_children(_node)) - 1);
+            }
         };
     }
 }
