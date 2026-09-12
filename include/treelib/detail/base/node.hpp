@@ -255,7 +255,7 @@ namespace tl
             constexpr void
             _m_hook_at(_m_hook_t _at, _m_node_ptr_t _node)
             {
-                this->_m_base_t::hook_at(_at, _node);
+                this->_m_base_t::_m_hook_at(_at, _node);
                 _node->_m_parent = this->_m_node_ptr();
             }
 

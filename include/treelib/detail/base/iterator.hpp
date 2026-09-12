@@ -28,6 +28,7 @@
  ***************************************************/
 
 #include <treelib/detail/base/node.hpp>
+#include <treelib/detail/bits/except.hpp>
 
 #include <iterator>
 #include <queue>
@@ -39,15 +40,16 @@ namespace tl
     {  
         /***************************************************
          * @brief CRTP-base-class for common functionality
-         *        of tree-iterators. supplies iterator-member-types,
-         *        post-increment/decrement and dereferencing.
+         *        of tree-iterators. 
+         *        supplies iterator-member-types,
+         *        post-increment/decrement, dereferencing
+         *        and equality-comparison.
          ***************************************************/
         template <bool IsConst,
                   typename ValueT,
                   typename NodeT,
                   typename IterT>
-        class _basic_iter_mixin
-            : public IterT
+        class _iter_base
         {
         protected:
 
@@ -62,6 +64,12 @@ namespace tl
             using _m_value_node_t = detail::_value_node<_m_node_t, _m_value_t>;
             using _m_vnode_ptr_t  = _m_value_node_t*;
 
+            /***************************************************
+             * @brief CRTP-cast to derived-class. allowed
+             *        because it is assumed that this class
+             *        will be inherited by '_m_iter_t'.
+             ***************************************************/
+
             constexpr _m_iter_t*
             _m_iter()
                 noexcept
@@ -72,26 +80,18 @@ namespace tl
                 const noexcept
             { return static_cast<const _m_iter_t*>(this); }
 
+            /***************************************************
+             * @brief accessor to derived-class's current node.
+             ***************************************************/
+
             constexpr _m_node_ptr_t
             _m_cur()
-                const
+                const noexcept
             { return this->_m_iter()->_m_cur(); }
 
-            constexpr void
-            _m_set_node(_m_node_ptr_t _node)
-            {
-                this->_m_iter()->_m_set_node(_node);
-            }
-
-            friend _m_iter_t;
             friend class _node_traits<_m_node_t>;
 
-            template <bool, typename, typename, typename>
-            friend class _basic_iter_mixin;
-
         public:
-
-            using _m_iter_t::_m_iter_t;
 
             using iterator_category = std::bidirectional_iterator_tag;
             using difference_type   = std::ptrdiff_t;
@@ -102,47 +102,27 @@ namespace tl
             using const_reference   = const value_type&;
 
             /***************************************************
-             * @brief constructor (1).
-             *        always constructible from mutable iterator.
-             *        
-             * @details note that the derived-iterator-type is also
-             *          a template-variable, because iterators of
-             *          the same node-type of any kind (queued/
-             *          traversing/leaf/sibling) should all be
-             *          convertible to each other, if the constness
-             *          allows it.
-             ***************************************************/
-            template <bool OtherIsConst, typename OtherIterT>
-                // either this is const, or both are mutable
-                requires (IsConst || !OtherIsConst)
-            _basic_iter_mixin(const _basic_iter_mixin<OtherIsConst, _m_value_t, _m_node_t, OtherIterT>& other)
-            { 
-                this->_m_set_node(other._m_cur());
-            }
-
-            /***************************************************
              * @brief compare two iterators based on their
              *        current node.
              *
              * @details note that the derived-iterator-type is also
-             *          a template-variable, because iterators of
+             *          a template-variable because iterators of
              *          the same node-type of any kind (queued/
              *          traversing/leaf/sibling) should all be
-             *          convertible to each other, if the constness
-             *          allows it.
+             *          comparable to each other.
              ***************************************************/
             template <bool OtherIsConst, typename OtherIterT>
             [[nodiscard]]
             friend constexpr bool
-            operator==(const _basic_iter_mixin& a, 
-                       const _basic_iter_mixin<OtherIsConst, _m_value_t, _m_node_t, OtherIterT>& b)
+            operator==(const _iter_base& a, 
+                       const _iter_base<OtherIsConst, value_type, _m_node_t, OtherIterT>& b)
                 noexcept
             { return a._m_cur() == b._m_cur(); }
 
             [[nodiscard]]
             constexpr reference 
             operator*()
-                const // noexcept(TREELIB_NO_EXCEPTIONS)
+                const TREELIB_NOEXCEPT
             {
             #ifdef TREELIB_NO_EXCEPTIONS
                 assert(this->_m_cur() != nullptr)
@@ -156,19 +136,10 @@ namespace tl
             [[nodiscard]]
             constexpr pointer 
             operator->()
-                const // noexcept(TREELIB_NO_EXCEPTIONS)
+                const TREELIB_NOEXCEPT
             {
-            #ifdef TREELIB_NO_EXCEPTIONS
-                assert(this->_m_cur() != nullptr)
-            #else
-                if (this->_m_cur() == nullptr)
-                    throw std::out_of_range("cannot dereference end-iterator");
-                return std::addressof(static_cast<_m_vnode_ptr_t>(this->_m_cur())->_m_get_value());
-            #endif
+                return std::addressof(this->operator*());
             }
-
-            using _m_iter_t::operator++;
-            using _m_iter_t::operator--;
 
             constexpr _m_iter_t
             operator++(int)
@@ -185,6 +156,49 @@ namespace tl
                 --(*this->_m_iter());
                 return _tmp;
             }
+        };
+
+
+        /***************************************************
+         * @brief CRTP-mixin defining a constructor
+         *        for conversions between any iterator-type
+         *        of correct node/value-type and constness.
+         ***************************************************/
+        template <bool IsConst,
+                  typename ValueT,
+                  typename NodeT,
+                  typename IterT>
+        class _iter_conversion_mixin
+            : public IterT
+        {
+        protected:
+
+            using _m_iter_t = IterT;
+            
+            template <bool, typename, typename, typename>
+            friend class _iter_conversion_mixin;
+
+        public:
+
+            using _m_iter_t::_m_iter_t;
+
+            /***************************************************
+             * @brief constructor (1).
+             *        always constructible from mutable iterator.
+             *        
+             * @details note that the derived-iterator-type is also
+             *          a template-variable, because iterators of
+             *          the same node-type of any kind (queued/
+             *          traversing/leaf/sibling) should all be
+             *          convertible to each other, if the constness
+             *          allows it.
+             ***************************************************/
+            template <bool OtherIsConst, typename OtherIterT>
+                // either this is const, or both are mutable
+                requires (IsConst || !OtherIsConst)
+            _iter_conversion_mixin(const _iter_conversion_mixin<OtherIsConst, ValueT, NodeT, OtherIterT>& other)
+                : _m_iter_t(other._m_cur())
+            { }
         };
 
         
@@ -291,20 +305,26 @@ namespace tl
 
         template <bool IsConst,
                   typename ValueT,
-                  typename TraversalT,
-                  typename IterT>
-        class _queued_iterator_base
+                  typename TraversalT>
+        class _queued_iterator_impl
+            : public _iter_base<IsConst, 
+                                ValueT,
+                                typename TraversalT::_m_node_t,
+                                _queued_iterator_impl<IsConst, ValueT, TraversalT>>
         {
         protected:
     
-            using _m_iter_t     = IterT;
             using _m_trav_t     = TraversalT;
             using _m_node_t     = typename _m_trav_t::_m_node_t;
             using _m_node_ptr_t = _m_node_t*;
             using _m_value_t    = ValueT;
 
+            using _m_base_t = _iter_base<IsConst, _m_value_t, _m_node_t, _queued_iterator_impl>;
+
             using _m_queue_t      = std::deque<_m_node_ptr_t>;
             using _m_queue_iter_t = typename _m_queue_t::iterator;
+
+            friend _m_base_t;
 
             _m_queue_t      _m_queue;
             _m_queue_iter_t _m_queue_cur;
@@ -312,18 +332,6 @@ namespace tl
             // happens when going backwards and then forwards again
             _m_queue_iter_t _m_queue_furthest; 
 
-            template <bool, typename, typename, typename>
-            friend class _basic_iter_mixin;
-
-            constexpr _m_iter_t*
-            _m_iter()
-                noexcept
-            { return static_cast<_m_iter_t*>(this); }
-
-            constexpr _m_iter_t*
-            _m_iter()
-                const noexcept
-            { return static_cast<const _m_iter_t*>(this); }
 
             constexpr _m_node_ptr_t 
             _m_cur()
@@ -332,13 +340,6 @@ namespace tl
                 return this->_m_queue_cur == this->_m_queue.end()
                        ? nullptr
                        : *this->_m_queue_cur;
-            }
-
-            constexpr void
-            _m_set_node(_m_node_ptr_t _node)
-            {
-                this->_m_queue.assign({_node});
-                this->_m_queue_cur = this->_m_queue_furthest = this->_m_queue.begin();
             }
 
             constexpr void
@@ -356,7 +357,7 @@ namespace tl
             }
 
             constexpr explicit
-            _queued_iterator_base(_m_node_ptr_t _node)
+            _queued_iterator_impl(_m_node_ptr_t _node)
                 : _m_queue({_node})
                 , _m_queue_cur(_m_queue.begin())
                 , _m_queue_furthest(_m_queue.begin())
@@ -369,27 +370,27 @@ namespace tl
             using traversal_type  = TraversalT;  
 
             constexpr
-            _queued_iterator_base()
+            _queued_iterator_impl()
                 : _m_queue()
                 , _m_queue_cur(this->_m_queue.end())
                 , _m_queue_furthest(this->_m_queue.end())
             { }
 
-            constexpr _m_iter_t& 
+            constexpr _queued_iterator_impl& 
             operator++()
             { 
                 if (this->_m_should_enqueue())
                     this->_m_enqueue_and_advance();
                 else 
                     ++this->_m_queue_cur;
-                return *this->_m_iter();
+                return *this;
             }
 
-            constexpr _m_iter_t& 
+            constexpr _queued_iterator_impl& 
             operator--()
             { 
                 --this->_m_queue_cur;
-                return *this->_m_iter(); 
+                return *this; 
             }
         };
 
@@ -397,25 +398,11 @@ namespace tl
         template <bool IsConst,
                   typename ValueT,
                   typename TraversalT>
-        class _queued_iterator
-            : public _basic_iter_mixin<IsConst, 
-                                       ValueT,
-                                       typename TraversalT::_m_node_t,
-                                       _queued_iterator_base<IsConst, ValueT, TraversalT, _queued_iterator<IsConst, ValueT, TraversalT>>>
-        { 
-        protected:
-
-            using _m_base_t = _basic_iter_mixin<IsConst, 
-                                       ValueT,
-                                       typename TraversalT::_m_node_t,
-                                       _queued_iterator_base<IsConst, ValueT, TraversalT, _queued_iterator<IsConst, ValueT, TraversalT>>>;
-
-            friend class _node_traits<typename TraversalT::_m_node_t>;
-
-        public:
-
-            using _m_base_t::_m_base_t;
-        };
+        using _queued_iterator
+            = _iter_conversion_mixin<IsConst, 
+                                     ValueT, 
+                                     typename TraversalT::_m_node_t, 
+                                     _queued_iterator_impl<IsConst, ValueT, TraversalT>>;
 
         // template <typename NodeT>
         // using _depth_first_pre_order_iterator 

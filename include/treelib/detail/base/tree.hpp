@@ -209,6 +209,68 @@ namespace tl
 
 
         /***************************************************
+         * @brief supplies basic recursive deletion
+         *        and copying methods for all tree-types.
+         ***************************************************/
+        template <typename NodeT,
+                  typename AllocT>
+        class _basic_tree_base
+            : public _alloc_base<NodeT, AllocT>
+            , public _size_base<AllocT>
+        {
+        protected:
+
+            using _m_size_base_t  = _size_base<AllocT>;
+            using _m_alloc_base_t = _alloc_base<NodeT, AllocT>;
+
+            using typename _m_alloc_base_t::_m_value_t;
+            using typename _m_alloc_base_t::_m_node_t;
+            using typename _m_alloc_base_t::_m_node_ptr_t;
+            using typename _m_alloc_base_t::_m_vnode_ptr_t;
+            using typename _m_alloc_base_t::_m_cvnode_ptr_t;
+            using typename _m_alloc_base_t::_m_cnode_ptr_t;
+            using typename _m_alloc_base_t::_m_size_t;
+            using typename _m_alloc_base_t::_m_node_traits_t;
+            using typename _m_alloc_base_t::_m_alloc_t;
+
+            using _m_hook_t = typename _m_node_traits_t::_m_hook_t;
+
+            constexpr
+            void _m_do_erase(_m_node_ptr_t _node)
+                noexcept
+            {
+                assert(_node != nullptr);
+                for (_m_node_ptr_t _child 
+                     : _m_node_traits_t::_s_children(_node))
+                    this->_m_do_erase(_child);
+                this->_m_put_node(static_cast<_m_vnode_ptr_t>(_node));
+                this->_m_dec_size();
+            }
+
+            constexpr void 
+            _m_insert_from_copy(_m_hook_t _at,
+                                _m_node_ptr_t _where, 
+                                _m_cnode_ptr_t _src)
+            {
+                _m_node_ptr_t _new_node = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(_src)->_m_get_value());
+                _m_node_traits_t::_s_hook_at(_where, _at, _new_node);
+                this->_m_inc_size();
+            }
+
+            constexpr void // probably refactor.
+            _m_copy_nodes(_m_node_ptr_t* dest, _m_cnode_ptr_t src)
+            {
+                *dest = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(src)->value());
+                _m_node_traits_t::_s_mimic((*dest), src, [&](auto... args) { this->_m_insert_from_copy(std::forward(args)...); });
+            }
+
+        public:
+            
+            using _m_alloc_base_t::_m_alloc_base_t;
+        };
+
+
+        /***************************************************
          * @brief base-class for trees which should
          *        originate from a single value-holding
          *        root-node.
@@ -223,21 +285,19 @@ namespace tl
         template <typename NodeT,
                   typename AllocT>
         class _root_base
-            : public _alloc_base<NodeT, AllocT>
-            , public _size_base<AllocT>
+            : public _basic_tree_base<NodeT, AllocT>
         {
         protected:
 
-            using _m_size_base_t  = _size_base<AllocT>;
-            using _m_alloc_base_t = _alloc_base<NodeT, AllocT>;
+            using _m_base_t = _basic_tree_base<NodeT, AllocT>;
 
-            using typename _m_alloc_base_t::_m_value_t;
-            using typename _m_alloc_base_t::_m_node_t;
-            using typename _m_alloc_base_t::_m_node_ptr_t;
-            using typename _m_alloc_base_t::_m_cnode_ptr_t;
-            using typename _m_alloc_base_t::_m_size_t;
-            using typename _m_alloc_base_t::_m_node_traits_t;
-            using typename _m_alloc_base_t::_m_alloc_t;
+            using typename _m_base_t::_m_value_t;
+            using typename _m_base_t::_m_node_t;
+            using typename _m_base_t::_m_node_ptr_t;
+            using typename _m_base_t::_m_cnode_ptr_t;
+            using typename _m_base_t::_m_size_t;
+            using typename _m_base_t::_m_node_traits_t;
+            using typename _m_base_t::_m_alloc_t;
 
             _m_node_ptr_t _m_root;
 
@@ -264,10 +324,10 @@ namespace tl
 
         public:
 
-            using typename _m_alloc_base_t::value_type;
-            using typename _m_alloc_base_t::allocator_type;
+            using typename _m_base_t::value_type;
+            using typename _m_base_t::allocator_type;
 
-            using _m_alloc_base_t::_m_alloc_base_t;
+            using _m_base_t::_m_base_t;
 
             constexpr
             _root_base()
@@ -327,6 +387,17 @@ namespace tl
             {
                 return this->emplace_root(value);
             }
+
+            /***************************************************
+             * @brief clears the contents.
+             ***************************************************/
+            constexpr void 
+            clear() 
+                noexcept
+            {
+                this->_m_do_erase(this->_m_root);
+                this->_m_reset();
+            }
         };
 
 
@@ -349,21 +420,19 @@ namespace tl
         template <typename NodeT,
                   typename AllocT>
         class _header_base
-            : public _alloc_base<NodeT, AllocT>
-            , public _size_base<AllocT>
+            : public _basic_tree_base<NodeT, AllocT>
         {
         protected:
 
-            using _m_alloc_base_t = _alloc_base<NodeT, AllocT>;
-            using _m_size_base_t  = _size_base<AllocT>;
+            using _m_base_t = _basic_tree_base<NodeT, AllocT>;
 
-            using typename _m_alloc_base_t::_m_node_t;
-            using typename _m_alloc_base_t::_m_node_ptr_t;
-            using typename _m_alloc_base_t::_m_cnode_ptr_t;
-            using typename _m_alloc_base_t::_m_vnode_ptr_t;
-            using typename _m_alloc_base_t::_m_cvnode_ptr_t;
-            using typename _m_alloc_base_t::_m_size_t;
-            using typename _m_alloc_base_t::_m_node_traits_t;
+            using typename _m_base_t::_m_value_t;
+            using typename _m_base_t::_m_node_t;
+            using typename _m_base_t::_m_node_ptr_t;
+            using typename _m_base_t::_m_cnode_ptr_t;
+            using typename _m_base_t::_m_size_t;
+            using typename _m_base_t::_m_node_traits_t;
+            using typename _m_base_t::_m_alloc_t;
 
             using _m_header_t = _m_node_t;
 
@@ -373,7 +442,7 @@ namespace tl
             void _m_reset()
                 noexcept
             {
-                this->_m_header->_m_reset();
+                this->_m_header._m_reset();
                 this->_m_size_base_t::_m_reset();
             }
 
@@ -381,7 +450,14 @@ namespace tl
             constexpr IterT
             _m_root_iter()
                 const noexcept
-            { return _m_node_traits_t::template _s_to_iter<IterT>(this->_m_header); }
+            { 
+                // casting constness away here is OK because if a mutable
+                // iterator is constructed, this is non-const anyway and
+                // if a const-iterator is constructed, the iterator does not
+                // expose the node directly, so constness is restored (i hope).
+                return _m_node_traits_t::template _s_to_iter<IterT>(
+                    const_cast<_m_node_ptr_t>(std::addressof(this->_m_header))); 
+            }
 
             template <typename IterT>
             constexpr IterT
@@ -392,12 +468,25 @@ namespace tl
         
         public:
 
-            using _m_alloc_base_t::_m_alloc_base_t;
+            using _m_base_t::_m_base_t;
 
             constexpr
             _header_base()
                 : _m_header()
             { }
+
+            /***************************************************
+             * @brief clears the contents.
+             ***************************************************/
+            constexpr void 
+            clear() 
+                noexcept
+            {
+                for (_m_node_ptr_t _child 
+                     : _m_node_traits_t::_s_children(std::addressof(this->_m_header)))
+                    this->_m_do_erase(_child);
+                this->_m_reset();
+            }
         };
 
 
@@ -432,35 +521,6 @@ namespace tl
             using typename _m_base_t::_m_node_traits_t;
 
             using _m_hook_t = typename _m_node_traits_t::_m_hook_t;
-
-            constexpr
-            void _m_do_erase(_m_node_ptr_t _node)
-                noexcept
-            {
-                assert(_node != nullptr);
-                for (_m_node_ptr_t _child 
-                     : _m_node_traits_t::_s_children(_node))
-                    this->_m_do_erase(_child);
-                this->_m_put_node(static_cast<_m_vnode_ptr_t>(_node));
-                this->_m_dec_size();
-            }
-
-            constexpr void 
-            _m_insert_from_copy(_m_hook_t _at,
-                                _m_node_ptr_t _where, 
-                                _m_cnode_ptr_t _src)
-            {
-                _m_node_ptr_t _new_node = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(_src)->_m_get_value());
-                _m_node_traits_t::_s_hook_at(_where, _at, _new_node);
-                this->_m_inc_size();
-            }
-
-            constexpr void // probably refactor.
-            _m_copy_nodes(_m_node_ptr_t* dest, _m_cnode_ptr_t src)
-            {
-                *dest = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(src)->value());
-                _m_node_traits_t::_s_mimic((*dest), src, [&](auto... args) { this->_m_insert_from_copy(std::forward(args)...); });
-            }
 
         public:
 
@@ -653,19 +713,6 @@ namespace tl
             }
 
             /***************************************************
-             * @brief clears the contents.
-             ***************************************************/
-            constexpr void 
-            clear() 
-                noexcept
-            {
-                if (this->empty())
-                    return;
-                this->_m_do_erase(this->_m_root);
-                this->_m_reset();
-            }
-
-            /***************************************************
              * @brief lexicographically compares the 
              *        values of two trees.
              * @note  this ignores the tree's actual hierarchical
@@ -684,7 +731,7 @@ namespace tl
 
         template <typename BaseT>
         struct _tree_mixin
-            : public BaseT
+            : public _outward_tree_mixin<BaseT>
         {
 
         };

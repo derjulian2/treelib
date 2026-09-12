@@ -39,17 +39,15 @@ namespace tl
 {
     namespace detail 
     {
-        template <typename _NodeT, std::size_t K>
+        template <typename NodeT, std::size_t K>
         struct _k_node_base
         {
-            using _m_node_t      = _NodeT;
+            using _m_node_t      = NodeT;
             using _m_node_ptr_t  = _m_node_t*;
             using _m_cnode_ptr_t = const _m_node_t*;
             using _m_hook_t = std::size_t;
 
             std::array<_m_node_ptr_t, K> _m_children_array;
-
-        protected:
 
             friend _m_node_t;
 
@@ -65,8 +63,6 @@ namespace tl
             _k_node_base()
                 : _m_children_array({nullptr})
             { }
-
-        public:
             
             constexpr void
             _m_hook_at(_m_hook_t at, _m_node_ptr_t node)

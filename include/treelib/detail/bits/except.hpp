@@ -13,6 +13,12 @@
 
 #include <stdexcept>
 
+#ifdef TREELIB_NO_EXCEPTIONS
+    #define TREELIB_NOEXCEPT noexcept
+#else
+    #define TREELIB_NOEXCEPT
+#endif
+
 namespace tl
 {
     /***************************************************

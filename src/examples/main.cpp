@@ -1,5 +1,6 @@
 
 #include <treelib/binary>
+#include <treelib/rose>
 
 #include <print>
 #include <string>
@@ -43,13 +44,65 @@ namespace tl
 
     int binary_tree_tests()
     {
-        // using tree_type = binary_tree<std::string>;
-        // static_assert(tl::detail::node<tl::detail::bidirectional_k_node<2>>);
+        using tree_type = binary_tree<int>;
+    
+        tree_type my_tree(1);
+        
+        tree_type::const_iterator it = my_tree.begin();
+        tree_type::iterator l  = my_tree.emplace(binary::left, my_tree.croot(), 2);
+        tree_type::iterator ll = my_tree.emplace(binary::left, l, 3);
+        tree_type::iterator lr = my_tree.emplace(binary::right, l, 4);
 
-        // std::allocator<std::string> my_alloc;
+        tree_type::iterator r  = my_tree.emplace(binary::right, my_tree.croot(), 5);
+        tree_type::iterator rl = my_tree.emplace(binary::left, r, 6);
+        tree_type::iterator rr = my_tree.emplace(binary::right, r, 7);
 
-        // tree_type my_tree_a("root_a", my_alloc);
-        // tree_type my_tree_b("root_b");
+        for (const int& i : my_tree)
+            std::println("i: {}", i);
+
+        return 0;
+    }
+
+    /***************************************************
+     * @brief tests the following rose-tree:
+     *
+     * >-"include"
+     *   >-"treelib"
+     *    |-"detail"
+     *    | |-"base"
+     *    | | |-"node.hpp"
+     *    | | |-"iterator.hpp"
+     *    | | >-"tree.hpp"
+     *    | >-"bits"
+     *    |   |-"except.hpp"
+     *    |   >-"make_tree.hpp"
+     *    |-"avl"
+     *    |-"binary"
+     *    |-"k_ary"
+     *    >-"rose"
+     *
+     * with a depth-first-pre-order traversal of:
+     * [ "include", "treelib", "detail", "base", "node.hpp", 
+     *   "iterator.hpp", "tree.hpp", "bits", "except.hpp", "make_tree.hpp",
+     *   "avl", "binary", "k_ary", "rose" ]
+     *
+     ***************************************************/
+    int rose_tree_tests()
+    {
+        using tree_type = tl::rose_tree<std::string>;
+
+        tree_type my_dir;
+
+        tree_type::iterator include = my_dir.emplace(vrose::first, my_dir.croot(), "include");
+        tree_type::iterator tl = my_dir.emplace(vrose::first, include, "treelib");
+        tree_type::iterator detail = my_dir.emplace(vrose::first, tl, "detail");
+        my_dir.emplace(vrose::last, tl, "avl");
+        my_dir.emplace(vrose::last, tl, "binary");
+        my_dir.emplace(vrose::last, tl, "k_ary");
+        my_dir.emplace(vrose::last, tl, "rose");
+
+        for (const std::string& s : my_dir)
+            std::println("{}", s);
 
         return 0;
     }
@@ -60,5 +113,6 @@ int main(int argc, char** argv)
 {   
     tl::outward_binary_tree_tests();
     tl::binary_tree_tests();
+    tl::rose_tree_tests();
     return 0;
 }
