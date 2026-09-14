@@ -5,28 +5,14 @@
 /***************************************************
  * @file   treelib/detail/trees/k_tree.hpp
  * @author Julian Benzel
- * @date   04.09.2026
+ * @date   14.09.2026
  *
- * @brief   type-generic k-ary-tree.
- * @details compile-options:
- *          1.) #define TREELIB_NO_EXCEPTIONS
- *              disables exception-safety. asserts are
- *              still used in debug-mode.
- *          
- *          2.) #define TREELIB_K_NODE_NO_SHIFT
- *              disables shifting-behaviour of k-tree-nodes:
- *              if a node should hook another to an 
- *              already occupied spot, that node will
- *              still be inserted, and the 'replaced
- *              one' will be shifted down to the same
- *              hook-spot of the newly inserted node.
- *
- *              disabling this will throw 
- *              tl::modification_error instead.
+ * @brief  type-generic k-ary-tree.
  ***************************************************/
 
 #include <treelib/detail/bits/except.hpp>
 #include <treelib/detail/base/node.hpp>
+#include <treelib/detail/base/traits.hpp>
 #include <treelib/detail/base/tree.hpp>
 #include <treelib/detail/base/forest.hpp>
 
@@ -70,7 +56,7 @@ namespace tl
                 if (at >= K)
                     throw modification_error("hook-index out-of-range");
             #ifdef TREELIB_K_NODE_NO_SHIFT
-                #ifdef TREELIB_NO_EXCEPTIONS
+                #ifdef _treelib_no_exceptions
                     assert(this->_m_children_array[at] != nullptr);
                 #else
                     if (this->_m_children_array[at] != nullptr)
@@ -142,26 +128,46 @@ namespace tl
             }
         };
 
+        /*
+         * @brief forward-declarations for the
+         *        actual node-types and
+         *        aliases to abbreviate the
+         *        CRTP/mixin-base-classes and make
+         *        them a bit more readable.
+         */
+
+        template <std::size_t>
+        struct _k_node;
+
+        template <std::size_t K>
+        struct _bidirectional_k_node;
+
+        template <std::size_t K>
+        using _outward_k_node_base
+            = _k_node_base<_k_node<K>, K>;
+
+        template <std::size_t K>
+        using _bidirectional_k_node_base
+            = _bidirectional_node<_k_node_base<_bidirectional_k_node<K>, K>>;
+
+
 
         template <std::size_t K>
         struct _k_node
-            : public _k_node_base<_k_node<K>, K>
-        { 
-            constexpr
-            _k_node() = default;
-        };
+            : public _outward_k_node_base<K>
+        { using _outward_k_node_base<K>::_outward_k_node_base; };
+
 
         template <std::size_t K>
         struct _bidirectional_k_node
-            : public _bidirectional_node_base<_k_node_base<_bidirectional_k_node<K>, K>>
+            : public _bidirectional_k_node_base<K>
         { 
-            using _m_base_t = _bidirectional_node_base<_k_node_base<_bidirectional_k_node<K>, K>>;
+            using _m_base_t = _bidirectional_k_node_base<K>;
             using typename _m_base_t::_m_node_t;
             using typename _m_base_t::_m_node_ptr_t;
             using typename _m_base_t::_m_cnode_ptr_t;
 
-            constexpr
-            _bidirectional_k_node() = default;
+            using _m_base_t::_m_base_t;
 
             constexpr bool
             _m_is_last()
@@ -230,7 +236,10 @@ namespace tl
 
     }
 
-    
+
+    /***************************************************
+     * @brief   type-generic k-ary-tree.
+     ***************************************************/
     template <typename T, 
               std::size_t K,
               typename Allocator = std::allocator<T>>
@@ -238,12 +247,14 @@ namespace tl
         = detail::_root_outward_tree<detail::_k_node<K>, Allocator>;
 
 
+    /***************************************************
+     * @brief   type-generic k-ary-tree.
+     ***************************************************/
     template <typename T, 
               std::size_t K,
               typename Allocator = std::allocator<T>>
     using k_tree 
-        = detail::_root_outward_tree<detail::_bidirectional_k_node<K>, Allocator>;
-
+        = detail::_root_tree<detail::_bidirectional_k_node<K>, Allocator>;
 }
 
 #endif

@@ -2,23 +2,27 @@
 #ifndef TREELIB_AVL_TREE_HPP
 #define TREELIB_AVL_TREE_HPP
 
-/**
+/***************************************************
  * @file   treelib/trees/avl_tree.hpp
  * @author Julian Benzel
  * @date   03.07.2026
  *
  * @brief  balanced binary-search-tree.
- */
+ ***************************************************/
 
-#include <treelib/trees/binary_tree.hpp>
+#include <treelib/detail/trees/binary_tree.hpp>
 
 namespace tl
 {
-    /* maybe implement as forest of strong_tree's? */
+    /***************************************************
+     * @brief balanced binary-search-tree with
+     *        iterator-stability upon insertion/erasure.
+     ***************************************************/
     template <typename T,
               typename Allocator>
+        requires std::three_way_comparable<T, std::less<>>
     struct avl_tree
-        : protected weak_binary_tree<T, Allocator>
+        : protected outward_binary_tree<T, Allocator>
     {
     private:
 
@@ -34,6 +38,37 @@ namespace tl
 
     public:
         
+        template <typename... Args>
+        constexpr iterator 
+        emplace(Args&&... args)
+        {
+
+        }
+
+        constexpr iterator
+        insert(const value_type& value)
+        {
+
+        }
+
+        constexpr iterator
+        lookup(const value_type& value)
+        {
+            
+        }
+
+        constexpr void
+        remove(const value_type& value)
+            noexcept
+        {
+
+        }
+
+        constexpr void
+        merge(const avl_tree& other)
+        {
+            
+        }
     };
 }
 

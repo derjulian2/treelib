@@ -13,17 +13,33 @@
 
 #include <stdexcept>
 
-#ifdef TREELIB_NO_EXCEPTIONS
-    #define TREELIB_NOEXCEPT noexcept
+/***************************************************
+ * @brief compile-time option to toggle exception-
+ *        safety of some tree-operations such as
+ *        insertion/erasure or traversal.
+ *        usually there will be assertions as well
+ *        which will be removed in release-builds.
+ ***************************************************/
+
+#ifdef _treelib_no_exceptions
+    #define _treelib_noexcept noexcept
 #else
-    #define TREELIB_NOEXCEPT
+    #define _treelib_noexcept
 #endif
+
+#define _treelib_noexcept_if(_expr) \
+noexcept(noexcept(_expr))
+
+#define _treelib_noexcept_if_member(_basename, _methodname) \
+noexcept(noexcept(std::declval<_basename>()._methodname()))
 
 namespace tl
 {
     /***************************************************
      * @brief error-type to be thrown on invalid
-     *        navigation-operations during tree-traversal.
+     *        navigation-operations during tree-traversal
+     *        (e.g. trying to find the parent of the
+     *         root-node).
      ***************************************************/
     struct traversal_error 
         : public std::runtime_error
@@ -33,7 +49,9 @@ namespace tl
     /***************************************************
      * @brief error-type to be thrown on invalid
      *        operations when modifying the structure
-     *        of a tree.
+     *        of a tree (e.g. trying to erase a sub-branch
+     *        where there is no actual node there and
+     *        _treelib_no_exceptions is not defined).
      ***************************************************/
     struct modification_error 
         : public std::runtime_error

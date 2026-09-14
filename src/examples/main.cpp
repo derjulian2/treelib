@@ -89,7 +89,7 @@ namespace tl
      ***************************************************/
     int rose_tree_tests()
     {
-        using tree_type = tl::rose_tree<std::string>;
+        using tree_type = rose_tree<std::string>;
 
         tree_type my_dir;
 

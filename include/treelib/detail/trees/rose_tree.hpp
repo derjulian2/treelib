@@ -216,9 +216,9 @@ namespace tl
         { };
 
         struct _bidirectional_vecrose_node
-            : public _bidirectional_node_base<_vecrose_node_base<_bidirectional_vecrose_node>>
+            : public _bidirectional_node<_vecrose_node_base<_bidirectional_vecrose_node>>
         { 
-            using _m_base_t = _bidirectional_node_base<_vecrose_node_base<_bidirectional_vecrose_node>>;
+            using _m_base_t = _bidirectional_node<_vecrose_node_base<_bidirectional_vecrose_node>>;
             using typename _m_base_t::_m_node_t;
             using typename _m_base_t::_m_node_ptr_t;
             using typename _m_base_t::_m_cnode_ptr_t;
@@ -276,9 +276,9 @@ namespace tl
         { };
 
         struct _bidirectional_listrose_node
-            : public _bidirectional_node_base<_listrose_node_base<_bidirectional_listrose_node>>
+            : public _bidirectional_node<_listrose_node_base<_bidirectional_listrose_node>>
         { 
-            using _m_base_t = _bidirectional_node_base<_listrose_node_base<_bidirectional_listrose_node>>;
+            using _m_base_t = _bidirectional_node<_listrose_node_base<_bidirectional_listrose_node>>;
             using typename _m_base_t::_m_node_t;
             using typename _m_base_t::_m_node_ptr_t;
             using typename _m_base_t::_m_cnode_ptr_t;

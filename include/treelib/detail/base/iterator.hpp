@@ -5,34 +5,18 @@
 /***************************************************
  * @file   treelib/detail/base/iterator.hpp
  * @author Julian Benzel
- * @date   03.09.2026
+ * @date   14.09.2026
  *
  * @brief  classes to enable various methods of
- *         tree-traversal (depth-first/breadth-first).
- *
- * @details this implementation distinguishes between
- *          'queued'-iterators, which form a queue
- *          of nodes if the user wants to iterate.
- *          
- *          this approach is useful if there are no
- *          means to iteratively traverse a tree
- *          (e.g. outward-trees, which don't have
- *           parent-references and thus cannot jump
- *           back up to higher nodes).
- *
- *          maybe one can also template iterative
- *          traversal??? need to somehow save the
- *          'child'-range and which child is next when
- *          jumping back up tho.
- *         
+ *         tree-traversal (depth-first/breadth-first)
+ *         between instances of a node-type.
  ***************************************************/
 
-#include <treelib/detail/base/node.hpp>
 #include <treelib/detail/bits/except.hpp>
+#include <treelib/detail/base/node.hpp>
 
 #include <iterator>
-#include <queue>
-#include <stack>
+#include <deque>
 
 namespace tl
 {
@@ -122,9 +106,9 @@ namespace tl
             [[nodiscard]]
             constexpr reference 
             operator*()
-                const TREELIB_NOEXCEPT
+                const _treelib_noexcept
             {
-            #ifdef TREELIB_NO_EXCEPTIONS
+            #ifdef _treelib_no_exceptions
                 assert(this->_m_cur() != nullptr)
             #else
                 if (this->_m_cur() == nullptr)
@@ -136,7 +120,7 @@ namespace tl
             [[nodiscard]]
             constexpr pointer 
             operator->()
-                const TREELIB_NOEXCEPT
+                const _treelib_noexcept
             {
                 return std::addressof(this->operator*());
             }
