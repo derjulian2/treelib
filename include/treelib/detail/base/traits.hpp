@@ -54,7 +54,7 @@
 
 namespace tl
 {
-    namespace detail
+    namespace _detail
     {
         /*****************************************
          * @brief requirements of a node-type to
@@ -94,7 +94,7 @@ namespace tl
                  *        respective recursion-points.
                  *        note that not all children require a 
                  *        corresponding hook-value to qualify as
-                 *        a child-node @see tl::detail::_listrose_node
+                 *        a child-node @see tl::_detail::_listrose_node
                  *        as an example.
                  ***************************************************/
                 { t->_m_children() }
@@ -357,8 +357,12 @@ namespace tl
 
             static constexpr _m_node_ptr_t 
             _s_to_node(const _m_iter_t& _iter)
-                _treelib_noexcept_if_member(_m_iter_t, _m_cur)
-            { return _iter._m_cur(); }
+                noexcept
+            { 
+                static_assert(_treelib_member_noexcept(_m_iter_t, _m_cur),
+                    "current-node accessor should not throw");
+                return _iter._m_cur(); 
+            }
         };
     }
 }

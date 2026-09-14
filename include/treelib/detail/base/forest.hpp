@@ -16,7 +16,7 @@
 
 namespace tl
 {
-    namespace detail
+    namespace _detail
     {
         template <typename NodeType,
                   typename Allocator>

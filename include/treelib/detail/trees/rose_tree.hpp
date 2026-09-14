@@ -37,7 +37,7 @@ namespace tl
         prev
     };
 
-    namespace detail
+    namespace _detail
     {
         template <typename... Fns>
         struct _visitor : public Fns...
@@ -335,22 +335,22 @@ namespace tl
     template <typename T, 
               typename Allocator = std::allocator<T>>
     using outward_vecrose_tree
-        = detail::_header_outward_tree<detail::_vecrose_node, Allocator>;
+        = _detail::_header_outward_tree<_detail::_vecrose_node, Allocator>;
 
     template <typename T, 
               typename Allocator = std::allocator<T>>
     using vecrose_tree
-        = detail::_header_tree<detail::_bidirectional_vecrose_node, Allocator>;
+        = _detail::_header_tree<_detail::_bidirectional_vecrose_node, Allocator>;
 
     template <typename T, 
               typename Allocator = std::allocator<T>>
     using outward_listrose_tree
-        = detail::_header_outward_tree<detail::_listrose_node, Allocator>;
+        = _detail::_header_outward_tree<_detail::_listrose_node, Allocator>;
 
     template <typename T, 
               typename Allocator = std::allocator<T>>
     using listrose_tree
-        = detail::_header_tree<detail::_bidirectional_listrose_node, Allocator>;
+        = _detail::_header_tree<_detail::_bidirectional_listrose_node, Allocator>;
 
     template <typename T,
               typename Allocator = std::allocator<T>>

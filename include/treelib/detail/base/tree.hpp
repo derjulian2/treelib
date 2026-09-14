@@ -19,7 +19,7 @@
 
 namespace tl
 {
-    namespace detail
+    namespace _detail
     {
         /***************************************************
          * @brief base-class that handles
@@ -313,7 +313,7 @@ namespace tl
             constexpr IterT
             _m_root_iter()
                 const noexcept
-            { return _m_node_traits_t::template _s_to_iter<IterT>(this->_m_root); }
+            { return _iter_traits<IterT>::_s_to_iter(this->_m_root); }
 
             template <typename IterT>
             constexpr IterT
@@ -631,7 +631,7 @@ namespace tl
             constexpr iterator 
             end()
                 noexcept
-            { return _m_node_traits_t::template _s_to_iter<iterator>(nullptr); }
+            { return _iter_traits<iterator>::_s_to_iter(nullptr); }
 
             /***************************************************
              * @returns an iterator to the end.
@@ -639,7 +639,7 @@ namespace tl
             constexpr const_iterator
             cend()
                 const noexcept
-            { return _m_node_traits_t::template _s_to_iter<const_iterator>(nullptr); }
+            { return _iter_traits<const_iterator>::_s_to_iter(nullptr); }
 
             /***************************************************
              * @brief construct a node in-place, as a relative 
@@ -653,10 +653,10 @@ namespace tl
             {
                 _m_node_ptr_t _new_node = this->_m_new_node(std::forward<Args>(args)...);
                 _m_node_traits_t::_s_hook_at(
-                    _m_node_traits_t::_s_from_iter(where), as, _new_node
+                    _iter_traits<const_iterator>::_s_to_node(where), as, _new_node
                 );
                 this->_m_inc_size();
-                return _m_node_traits_t::template _s_to_iter<iterator>(_new_node);
+                return _iter_traits<iterator>::_s_to_iter(_new_node);
             }
 
             /***************************************************

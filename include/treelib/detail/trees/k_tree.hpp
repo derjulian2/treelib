@@ -23,7 +23,7 @@
 
 namespace tl
 {
-    namespace detail 
+    namespace _detail 
     {
         template <typename NodeT, std::size_t K>
         struct _k_node_base
@@ -36,6 +36,8 @@ namespace tl
             std::array<_m_node_ptr_t, K> _m_children_array;
 
             friend _m_node_t;
+
+            static constexpr std::size_t _s_arity = K;
 
             /***************************************************
              * constructor (1).
@@ -128,13 +130,13 @@ namespace tl
             }
         };
 
-        /*
+        /**********************************************
          * @brief forward-declarations for the
          *        actual node-types and
          *        aliases to abbreviate the
          *        CRTP/mixin-base-classes and make
          *        them a bit more readable.
-         */
+         **********************************************/
 
         template <std::size_t>
         struct _k_node;
@@ -144,12 +146,19 @@ namespace tl
 
         template <std::size_t K>
         using _outward_k_node_base
+    #ifdef _treelib_store_depth
+            = _depth_node<_k_node_base<_k_node<K>, K>>;
+    #else
             = _k_node_base<_k_node<K>, K>;
+    #endif
 
         template <std::size_t K>
         using _bidirectional_k_node_base
+    #ifdef _treelib_store_depth
+            = _depth_node<_bidirectional_node<_k_node_base<_bidirectional_k_node<K>, K>>>
+    #else
             = _bidirectional_node<_k_node_base<_bidirectional_k_node<K>, K>>;
-
+    #endif
 
 
         template <std::size_t K>
@@ -244,7 +253,7 @@ namespace tl
               std::size_t K,
               typename Allocator = std::allocator<T>>
     using outward_k_tree 
-        = detail::_root_outward_tree<detail::_k_node<K>, Allocator>;
+        = _detail::_root_outward_tree<_detail::_k_node<K>, Allocator>;
 
 
     /***************************************************
@@ -254,7 +263,7 @@ namespace tl
               std::size_t K,
               typename Allocator = std::allocator<T>>
     using k_tree 
-        = detail::_root_tree<detail::_bidirectional_k_node<K>, Allocator>;
+        = _detail::_root_tree<_detail::_bidirectional_k_node<K>, Allocator>;
 }
 
 #endif

@@ -2,18 +2,42 @@
 #ifndef TREELIB_BASE_NODE_HPP
 #define TREELIB_BASE_NODE_HPP
 
- /***************************************************
+ /***********************************************************************
   * @file   treelib/detail/base/node.hpp
   * @author Julian Benzel
   * @date   14.09.2026
   *
-  * @brief  mixins for node-types.
+  * @brief  mixins/CRTP-mixins for node-types.
   *
-  * @todo   tl::detail::_bidirectional_node does not
-  *         support _treelib_store_depth, as
-  *         we need a method to recursively update the
-  *         node's depth-values as additional bookkeeping.
-  ***************************************************/
+  * @details some of these classes are designed to be inherited
+  *          from a third 'unifying'-type that will
+  *          pass itself as a template-parameter to
+  *          the respective CRTP-base-classes. 
+  *          this way we get the type with all required 
+  *          features into the node-base and into the extender,
+  *          keeping '_m_node_t' fixed to the final node-type.
+  *
+  *          @see tl::_detail::_bidirectional_k_node as
+  *          an example of this:
+  *
+  *              k_node_base<bidirectional_k_node>
+  *                             |
+  *              bidirectional_node<bidirectional_k_node>
+  *                             |
+  *     (optional) depth_node<bidirectional_k_node>
+  *                             |
+  *                 bidirectional_k_node 
+  *
+  *          with the final type injected throughout
+  *          the linear inheritance-chain.
+  *
+  *          to avoid specifying the final type twice,
+  *          the classes will get the final type via
+  *          NodeBaseT::_m_node_t, which is just a
+  *          sort of 'indirect'-CRTP. it is always assumed
+  *          that a cast to the final/derived type '_m_node_t*' 
+  *          is valid, making these types CRTP-classes AND mixins.
+  ***********************************************************************/
 
 #include <treelib/detail/bits/except.hpp>
 
@@ -22,10 +46,10 @@
 
 namespace tl
 {
-    namespace detail
+    namespace _detail
     {
         /***************************************************
-         * @brief template-mixin that adds an instance
+         * @brief mixin that adds an instance
          *        of value-type to the passed node-type.
          *
          *        these will be the instances that will
@@ -81,35 +105,9 @@ namespace tl
 
 
         /***************************************************
-         * @brief template-CRTP-mixin that extends the
+         * @brief CRTP-mixin that extends the
          *        passed node-base-type by an additional
          *        back-pointer to it's owning parent.
-         * 
-         * @details this class is designed to be inherited
-         *          from a third 'unifying'-type that will
-         *          pass itself as a template-parameter to
-         *          the CRTP-class NodeBaseT. this way we
-         *          get the type with all required features
-         *          into the node-base and into this extender
-         *          keeping the recursiveness through the 
-         *          pointers without any nasty casts.
-         *
-         *          @see tl::detail::_bidirectional_k_node as
-         *          an example of this:
-         *
-         *              k_node_base<bidirectional_k_node>
-         *                             |
-         *              bidirectional_node<bidirectional_k_node>
-         *                             |
-         *                  bidirectional_k_node
-         *
-         *          with the final type injected throughout
-         *          the inheritance-chain.
-         *
-         *          to avoid specifying the final type twice,
-         *          this class will get the final type via
-         *          NodeBaseT::_m_node_t, which is just a
-         *          sort of 'indirect'-CRTP.
          ***************************************************/
         template <typename NodeBaseT>
         class _bidirectional_node
@@ -126,18 +124,15 @@ namespace tl
         protected:
 
             _m_node_ptr_t _m_parent;
-        
-        #ifdef _treelib_store_depth
-            std::size_t   _m_depth;
-        #endif
 
-            constexpr void
-            _m_reset()
-                noexcept
-            { this->_m_parent = nullptr; } 
+            // unused code
+            // constexpr void
+            // _m_reset()
+            //     noexcept
+            // { this->_m_parent = nullptr; } 
 
             /***************************************************
-             * @brief since this is a CRTP-base-class,
+             * @brief since this is a CRTP-base,
              *        we can assume that casting itself to
              *        to a _m_node_ptr_t is valid. 
              ***************************************************/
@@ -170,6 +165,10 @@ namespace tl
 
         public:
                 
+            /***************************************************
+             * @brief parent accessors.
+             ***************************************************/
+
             constexpr _m_node_ptr_t
             _m_get_parent() 
                 noexcept
@@ -228,6 +227,86 @@ namespace tl
                 this->_m_parent = nullptr;
             }
 
+        };
+        
+
+        /***************************************************
+         * @brief CRTP-mixin that extends the
+         *        passed node-base-type by a member-variable
+         *        keeping track of the node's depth in the
+         *        tree (i.e. the distance from the root-node).
+         ***************************************************/
+        template <typename NodeBaseT>
+        class _depth_node
+            : public NodeBaseT
+        {
+        public:
+
+            using _m_base_t      = NodeBaseT;
+            using _m_node_t      = typename _m_base_t::_m_node_t;
+            using _m_node_ptr_t  = _m_node_t*;
+            using _m_cnode_ptr_t = const _m_node_t*;
+            using typename _m_base_t::_m_hook_t;
+            using _m_depth_t     = std::size_t;
+
+        protected:
+
+            _m_depth_t _m_depth;
+
+            /***************************************************
+             * constructor (1).
+             * default-constructible,
+             * initializes depth to 0.
+             *
+             * this constructor is marked protected because
+             * this CRTP-base should not be instantiated
+             * on it's own.
+             ***************************************************/
+            constexpr
+            _depth_node()
+                _treelib_noexcept_if(_m_base_t())
+                : _m_base_t()
+                , _m_depth(0)
+            { }
+
+        public:
+
+            /***************************************************
+             * @brief set the depth-member to the desired
+             *        value and recursively update all child-
+             *        nodes.
+             ***************************************************/
+            constexpr void
+            _m_update_depth(_m_depth_t _depth)
+                noexcept
+            {
+                this->_m_depth = _depth;
+                for (_m_node_ptr_t _child
+                     : this->_m_base_t::_m_children())
+                     _child->_m_update_depth(_depth + 1);
+            }
+        
+            /***************************************************
+             * @brief depth accessor.
+             ***************************************************/
+
+            constexpr _m_depth_t
+            _m_get_depth()
+                const noexcept
+            { return this->_m_depth; }
+
+            /***************************************************
+             * @brief recursively update the depth-values when
+             *        hooking another node.
+             ***************************************************/
+
+            constexpr void
+            _m_hook_at(_m_hook_t _at, _m_node_ptr_t _node)
+                _treelib_noexcept_if_member(_m_base_t, _m_hook_at)
+            {
+                this->_m_base_t::_m_hook_at(_at, _node);
+                _node->_m_update_depth(this->_m_depth + 1);
+            }
         };
     }
 }

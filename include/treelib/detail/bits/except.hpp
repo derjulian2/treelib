@@ -30,8 +30,11 @@
 #define _treelib_noexcept_if(_expr) \
 noexcept(noexcept(_expr))
 
-#define _treelib_noexcept_if_member(_basename, _methodname) \
-noexcept(noexcept(std::declval<_basename>()._methodname()))
+#define _treelib_member_noexcept(_typename, _methodname) \
+noexcept(std::declval<_typename>()._methodname())
+
+#define _treelib_noexcept_if_member(_typename, _methodname) \
+noexcept(_treelib_member_noexcept(_typename, _methodname))
 
 namespace tl
 {
