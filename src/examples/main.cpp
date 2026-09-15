@@ -1,6 +1,6 @@
 
 #include <treelib/binary>
-#include <treelib/rose>
+// #include <treelib/rose>
 
 #include <print>
 #include <string>
@@ -44,21 +44,21 @@ namespace tl
 
     int binary_tree_tests()
     {
-        using tree_type = binary_tree<int>;
+        // using tree_type = binary_tree<int>;
     
-        tree_type my_tree(1);
+        // tree_type my_tree(1);
         
-        tree_type::const_iterator it = my_tree.begin();
-        tree_type::iterator l  = my_tree.emplace(binary::left, my_tree.croot(), 2);
-        tree_type::iterator ll = my_tree.emplace(binary::left, l, 3);
-        tree_type::iterator lr = my_tree.emplace(binary::right, l, 4);
+        // tree_type::const_iterator it = my_tree.begin();
+        // tree_type::iterator l  = my_tree.emplace(binary::left, my_tree.croot(), 2);
+        // tree_type::iterator ll = my_tree.emplace(binary::left, l, 3);
+        // tree_type::iterator lr = my_tree.emplace(binary::right, l, 4);
 
-        tree_type::iterator r  = my_tree.emplace(binary::right, my_tree.croot(), 5);
-        tree_type::iterator rl = my_tree.emplace(binary::left, r, 6);
-        tree_type::iterator rr = my_tree.emplace(binary::right, r, 7);
+        // tree_type::iterator r  = my_tree.emplace(binary::right, my_tree.croot(), 5);
+        // tree_type::iterator rl = my_tree.emplace(binary::left, r, 6);
+        // tree_type::iterator rr = my_tree.emplace(binary::right, r, 7);
 
-        for (const int& i : my_tree)
-            std::println("i: {}", i);
+        // for (const int& i : my_tree)
+        //     std::println("i: {}", i);
 
         return 0;
     }
@@ -89,20 +89,20 @@ namespace tl
      ***************************************************/
     int rose_tree_tests()
     {
-        using tree_type = rose_tree<std::string>;
+        // using tree_type = rose_tree<std::string>;
 
-        tree_type my_dir;
+        // tree_type my_dir;
 
-        tree_type::iterator include = my_dir.emplace(vrose::first, my_dir.croot(), "include");
-        tree_type::iterator tl = my_dir.emplace(vrose::first, include, "treelib");
-        tree_type::iterator detail = my_dir.emplace(vrose::first, tl, "detail");
-        my_dir.emplace(vrose::last, tl, "avl");
-        my_dir.emplace(vrose::last, tl, "binary");
-        my_dir.emplace(vrose::last, tl, "k_ary");
-        my_dir.emplace(vrose::last, tl, "rose");
+        // tree_type::iterator include = my_dir.emplace(vrose::first, my_dir.croot(), "include");
+        // tree_type::iterator tl = my_dir.emplace(vrose::first, include, "treelib");
+        // tree_type::iterator detail = my_dir.emplace(vrose::first, tl, "detail");
+        // my_dir.emplace(vrose::last, tl, "avl");
+        // my_dir.emplace(vrose::last, tl, "binary");
+        // my_dir.emplace(vrose::last, tl, "k_ary");
+        // my_dir.emplace(vrose::last, tl, "rose");
 
-        for (const std::string& s : my_dir)
-            std::println("{}", s);
+        // for (const std::string& s : my_dir)
+        //     std::println("{}", s);
 
         return 0;
     }

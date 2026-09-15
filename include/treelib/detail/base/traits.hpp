@@ -235,6 +235,11 @@ namespace tl
             }
         #endif
 
+            static constexpr std::size_t
+            _s_child_count(_m_cptr_t _node)
+                noexcept
+            { return std::ranges::size(_node->_m_children()); }
+
             /***************************************************
              * @brief hook-functionality.
              ***************************************************/

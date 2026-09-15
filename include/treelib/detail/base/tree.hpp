@@ -5,15 +5,20 @@
 /***************************************************
  * @file   treelib/detail/base/tree.hpp
  * @author Julian Benzel
- * @date   03.09.2026
+ * @date   15.09.2026
  *
- * @brief  base-class for common tree-operations
+ * @brief  base-classes/mixins for common tree-types
  *         operating on the respective node-type.
+ *
+ * @todo   - maybe make _size_base an optional mixin.
+ *         - tags/enum for clean interface in 
+ *           traversal-selection. 
  ***************************************************/
 
-#include <treelib/detail/base/node.hpp>
-#include <treelib/detail/base/iterator.hpp>
 #include <treelib/detail/bits/except.hpp>
+#include <treelib/detail/base/node.hpp>
+#include <treelib/detail/base/traits.hpp>
+#include <treelib/detail/base/iterator.hpp>
 
 #include <cassert>
 
@@ -315,13 +320,6 @@ namespace tl
                 const noexcept
             { return _iter_traits<IterT>::_s_to_iter(this->_m_root); }
 
-            template <typename IterT>
-            constexpr IterT
-            _m_begin_iter()
-                const noexcept
-            // since root is value-holding, this is equivalent to root
-            { return this->_m_root_iter<IterT>();}
-
         public:
 
             using typename _m_base_t::value_type;
@@ -413,9 +411,6 @@ namespace tl
          *        next-sibling at the value-holding root-node,
          *        there would be no parent-node holding
          *        ownership for that node.
-         *
-         *        the only real difference is in the .root() and
-         *        .begin() iterator-accessors.
          ***************************************************/
         template <typename NodeT,
                   typename AllocT>
@@ -458,13 +453,6 @@ namespace tl
                 return _m_node_traits_t::template _s_to_iter<IterT>(
                     const_cast<_m_node_ptr_t>(std::addressof(this->_m_header))); 
             }
-
-            template <typename IterT>
-            constexpr IterT
-            _m_begin_iter()
-                const noexcept
-            // advance once to move to first-child, if any
-            { return std::next(this->_m_root_iter<IterT>());}
         
         public:
 
@@ -522,26 +510,39 @@ namespace tl
 
             using _m_hook_t = typename _m_node_traits_t::_m_hook_t;
 
+            template <traversal Trav>
+            using _m_to_trav_t = _to_traversal_t<Trav, _m_node_t>;
+
         public:
 
             using typename _m_base_t::allocator_type;
             using size_type = _m_size_t;
             using typename _m_base_t::value_type;
 
-            using default_traversal_type = _depth_first_pre_order<_m_node_t>;
+            static constexpr traversal
+                default_traversal = traversal::depth_first;
 
+            template <traversal Trav>
             using queued_iterator       
-                = _queued_iterator<false, _m_value_t, default_traversal_type>;
+                = _queued_iterator<false, _m_value_t, _m_to_trav_t<Trav>>;
+
+            template <traversal Trav>
             using const_queued_iterator 
-                = _queued_iterator<true, _m_value_t, default_traversal_type>;
-            // using traversing_iterator = _traversing_iterator<_m_value_t, default_traversal_type>;
+                = _queued_iterator<true, _m_value_t, _m_to_trav_t<Trav>>;
+
             // using leaf_iterator       = _leaf_iterator<_m_value_t, _m_node_t>;
+            
             // using child_iterator      = _child_iterator<_m_value_t, _m_node_t>;
+            
             // using node_info           = _node_info<_m_node_t>;
 
-            using iterator       = queued_iterator;
-            using const_iterator = const_queued_iterator;
+            using iterator       = queued_iterator<default_traversal>;
+            using const_iterator = const_queued_iterator<default_traversal>;
             using hook_type      = _m_node_t::_m_hook_t;
+
+            /***************************************************
+             * constructors / special-member-functions.
+             ***************************************************/
 
             using _m_base_t::_m_base_t;
 
@@ -592,38 +593,56 @@ namespace tl
             { this->clear(); }
 
             /***************************************************
-             * @returns an iterator to the valueless
-             *          root-node of the tree.
+             * iterators.
+             ***************************************************/
+
+            /***************************************************
+             * @returns an iterator to the root-node of the tree.
              ***************************************************/
             constexpr iterator 
             root()
-                noexcept
             { return this->template _m_root_iter<iterator>(); }
 
             /***************************************************
-             * @returns an iterator to the valueless
-             *          root-node of the tree.
+             * @returns an iterator to the root-node of the tree.
              ***************************************************/
             constexpr const_iterator 
             croot()
-                const noexcept
+                const
             { return this->template _m_root_iter<const_iterator>(); }
 
             /***************************************************
-             * @returns an iterator to the beginning.
+             * @returns a queued iterator to the beginning, 
+             *          using the specified traversal-type.
+             ***************************************************/
+
+            template <traversal Trav>
+            constexpr queued_iterator<Trav>
+            qbegin()
+            { return this->root(); }
+
+            template <traversal Trav>
+            constexpr queued_iterator<Trav>
+            cqbegin()
+                const
+            { return this->croot(); }
+
+            /***************************************************
+             * @returns an iterator to the beginning, using
+             *          the default-traversal and iterator-type.
              ***************************************************/
             constexpr iterator 
             begin() 
-                noexcept
-            { return this->template _m_begin_iter<iterator>(); }
+            { return this->template qbegin<default_traversal>(); }
 
             /***************************************************
-             * @returns an iterator to the beginning.
+             * @returns an iterator to the beginning, using
+             *          the default-traversal and iterator-type.
              ***************************************************/
             constexpr const_iterator
             cbegin()
-                const noexcept
-            { return this->template _m_begin_iter<const_iterator>(); }
+                const
+            { return this->template cqbegin<default_traversal>(); }
 
             /***************************************************
              * @returns an iterator to the end.
@@ -640,6 +659,10 @@ namespace tl
             cend()
                 const noexcept
             { return _iter_traits<const_iterator>::_s_to_iter(nullptr); }
+
+            /***************************************************
+             * modifiers.
+             ***************************************************/
 
             /***************************************************
              * @brief construct a node in-place, as a relative 
@@ -719,13 +742,13 @@ namespace tl
              *        structure. need to implement a true tree-compare.
              ***************************************************/
         
-            friend constexpr bool
-            operator==(const _outward_tree_mixin& a,
-                       const _outward_tree_mixin& b)
-            {
-                return std::lexicographical_compare(a.cbegin(), a.cend(),
-                                                    b.cbegin(), b.cend());
-            }
+            // friend constexpr bool
+            // operator==(const _outward_tree_mixin& a,
+            //            const _outward_tree_mixin& b)
+            // {
+            //     return std::lexicographical_compare(a.cbegin(), a.cend(),
+            //                                         b.cbegin(), b.cend());
+            // }
         };
 
 
@@ -733,7 +756,35 @@ namespace tl
         struct _tree_mixin
             : public _outward_tree_mixin<BaseT>
         {
+        protected:
 
+            using _m_base_t = _outward_tree_mixin<BaseT>;
+            using typename _m_base_t::_m_node_t;
+            using typename _m_base_t::_m_value_t;
+
+            template <traversal Trav>
+            using _m_to_trav_t = _to_traversal_t<Trav, _m_node_t>;
+
+        public:
+
+            template <traversal Trav>
+            using traversing_iterator = _traversing_iterator<_m_value_t, _m_to_trav_t<Trav>>;
+
+            /***************************************************
+             * @returns a traversing iterator to the beginning, 
+             *          using the specified traversal-type.
+             ***************************************************/
+
+            template <traversal Trav>
+            constexpr traversing_iterator<Trav>
+            tbegin()
+            { return this->root(); }
+
+            template <traversal Trav>
+            constexpr traversing_iterator<Trav>
+            ctbegin()
+                const
+            { return this->croot(); }
         };
 
 

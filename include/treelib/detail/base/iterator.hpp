@@ -11,9 +11,8 @@
  *         tree-traversal (depth-first/breadth-first)
  *         between instances of a node-type.
  *
- * @todo   - traversal-types duplicate just because
- *           of reverse-orders, maybe refactor.
- *         - other iterator-types
+ * @todo   - other iterator-types
+ *         - depth-first in-order/post-order traversals
  *         - tree-meta info struct 'node_info'
  ***************************************************/
 
@@ -26,8 +25,289 @@
 
 namespace tl
 {
+    /***************************************************
+     * @brief traversal-selection interface.
+     ***************************************************/
+
+    enum struct traversal
+        // somehow convert a value here to a traversal-type
+    {
+        depth_first_pre_order,
+        depth_first_in_order,
+        depth_first_post_order,
+        depth_first_reverse_pre_order,
+        depth_first_reverse_in_order,
+        depth_first_reverse_post_order,
+        depth_first,
+
+        breadth_first_in_order,
+        breadth_first_reverse_order,
+        breadth_first
+    };
+
     namespace _detail
     {  
+        /***************************************************
+         * @brief type that is stored within the queue
+         *        of queued iterators. contains a node-ptr
+         *        and a boolean flag, indicating if this
+         *        node was already expanded or not.
+         ***************************************************/
+        template <typename NodeT>
+        struct _queue_thunk
+        {
+            using _m_node_t        = NodeT;
+            using _m_node_traits_t = _node_traits<_m_node_t>;
+            using _m_node_ptr_t    = typename _m_node_traits_t::_m_ptr_t;
+            using _m_flag_t        = bool;
+
+            _m_node_ptr_t _m_node;
+            _m_flag_t     _m_expanded;
+
+            constexpr
+            _queue_thunk()
+                : _m_node(nullptr)
+                , _m_expanded(false)
+            { }
+
+            constexpr explicit
+            _queue_thunk(_m_node_ptr_t _node)
+                : _m_node(_node)
+                , _m_expanded(false)
+            { }
+
+            constexpr void
+            _m_set()
+                noexcept
+            { this->_m_expanded = true; }
+        };
+
+
+        /***************************************************
+         * @brief traversal-type for depth-first-pre-order.
+         *        
+         * @details depth-first-pre-order traverses the
+         *          current-node first and then moves on
+         *          to the child-nodes afterwards.  
+         ***************************************************/
+        template <bool Reversed,
+                  typename NodeT>
+        struct _depth_first_pre_order
+        {
+            using _m_node_t        = NodeT;
+            using _m_node_traits_t = _node_traits<_m_node_t>;
+            using _m_node_ptr_t    = typename _m_node_traits_t::_m_ptr_t;
+
+            using _m_thunk_t = _queue_thunk<_m_node_t>;
+            using _m_queue_t = std::deque<_m_thunk_t>;
+            using _m_iter_t  = typename _m_queue_t::iterator;
+
+            /***************************************************
+             * @brief   expands the node pointed to by '_first'
+             *          to it's children and inserts them
+             *          just after '_first', forming the depth-
+             *          first-traversal, node-by-node.
+             *
+             * @returns an iterator to the next node in the
+             *          traversal-sequence.
+             ***************************************************/
+            static constexpr _m_iter_t
+            _s_expand_queue(_m_iter_t _first, _m_queue_t& _queue)
+            {
+                if (_queue.empty())
+                    return _first;
+
+                _first->_m_set();
+                _m_iter_t _res = _first;
+                // 'drag' the iterator one down after each 
+                // insert, to insert sequentially
+                if constexpr (Reversed)
+                    for (_m_node_ptr_t _child :
+                         _m_node_traits_t::_s_children(_first->_m_node)
+                         | std::views::reverse)
+                        _queue.insert(++_first, _m_thunk_t(_child));
+                else
+                    for (_m_node_ptr_t _child :
+                         _m_node_traits_t::_s_children(_first->_m_node))
+                         _queue.insert(++_first, _m_thunk_t(_child));
+                return std::next(_res);
+            }
+        };
+
+
+        /***************************************************
+         * @brief traversal-type for depth-first-post-order.
+         *        
+         * @details depth-first-post-order traverses the
+         *          current-node's children first, and then 
+         *          moves on to the current-node afterwards.
+         ***************************************************/
+        template <bool Reversed,
+                  typename NodeT>
+        struct _depth_first_post_order
+        {
+            using _m_node_t        = NodeT;
+            using _m_node_traits_t = _node_traits<_m_node_t>;
+            using _m_node_ptr_t    = typename _m_node_traits_t::_m_ptr_t;
+
+            using _m_thunk_t = _queue_thunk<_m_node_t>;
+            using _m_queue_t = std::deque<_m_thunk_t>;
+            using _m_iter_t  = typename _m_queue_t::iterator;
+
+            /***************************************************
+             * @brief   expands the node pointed to by '_first'
+             *          to 
+             *
+             * @returns an iterator to the next node in the
+             *          traversal-sequence.
+             ***************************************************/
+            static constexpr _m_iter_t
+            _s_expand_queue(_m_iter_t _first, _m_queue_t& _queue)
+            {
+                if (_queue.empty())
+                    return _first;
+                
+                _first->_m_set();
+                _m_iter_t _res = _first;
+                if constexpr (Reversed)
+                    for (_m_node_ptr_t _child :
+                         _m_node_traits_t::_s_children(*_first)
+                         | std::views::reverse)
+                        _res = _queue.insert(_res, _m_thunk_t(_child));
+                else
+                    for (_m_node_ptr_t _child :
+                        _m_node_traits_t::_s_children(_first->_m_node))
+                        _res = _queue.insert(_res, _m_thunk_t(_child));
+                // recursively insert, because post-order
+                // visits the deepest first
+                return _s_expand_queue(_res, _queue);
+            }
+        };
+
+
+        /***************************************************
+         * @brief traversal-type for depth-first-in-order.
+         *        
+         * @details depth-first-in-order traverses the
+         *          first half of current-node's children first, 
+         *          then the current node, and then the other
+         *          half afterwards.
+         ***************************************************/
+        template <bool Reversed,
+                  typename NodeT>
+        struct _depth_first_in_order
+        {
+            using _m_node_t        = NodeT;
+            using _m_node_traits_t = _node_traits<_m_node_t>;
+            using _m_node_ptr_t    = typename _m_node_traits_t::_m_ptr_t;
+
+            using _m_thunk_t = _queue_thunk<_m_node_t>;
+            using _m_queue_t = std::deque<_m_thunk_t>;
+            using _m_iter_t  = typename _m_queue_t::iterator;
+
+            /***************************************************
+             * @brief   expands the node pointed to by '_first'
+             *          to 
+             *
+             * @returns an iterator to the next node in the
+             *          traversal-sequence.
+             ***************************************************/
+            static constexpr _m_iter_t
+            _s_expand_queue(_m_iter_t _first, _m_queue_t& _queue)
+            {
+                if (_queue.empty())
+                    return _first;
+                
+                std::size_t _child_count 
+                    = _m_node_traits_t::_s_child_count(_first->_m_node);
+                std::size_t _half      = _child_count / 2;
+
+                _first->_m_set();
+                _m_iter_t _res = _first;
+                if constexpr (Reversed)
+                    for (_m_node_ptr_t _child :
+                         _m_node_traits_t::_s_children(*_first)
+                         | std::views::reverse)
+                        _res = _queue.insert(_res, _m_thunk_t(_child));
+                else
+                    for (_m_node_ptr_t _child :
+                         _m_node_traits_t::_s_children(_first->_m_node))
+                    {
+                        if (_child_count > _half)
+                            _res = _queue.insert(_res, _m_thunk_t(_child));
+                        else
+                            _queue.insert(++_first, _m_thunk_t(_child));
+                        --_child_count;
+                    }
+                // recursively insert, because in-order
+                // visits the deepest first
+                return _s_expand_queue(_res, _queue);
+            }
+        };
+
+
+        /***************************************************
+         * @brief traversal-type for breadth-first.
+         ***************************************************/
+        template <bool Reversed,
+                  typename NodeT>
+        struct _breadth_first
+        {
+            using _m_node_t        = NodeT;
+            using _m_node_traits_t = _node_traits<_m_node_t>;
+            using _m_node_ptr_t    = typename _m_node_traits_t::_m_ptr_t;
+
+            using _m_thunk_t = _queue_thunk<_m_node_t>;
+            using _m_queue_t = std::deque<_m_thunk_t>;
+            using _m_iter_t  = typename _m_queue_t::iterator;
+
+            /***************************************************
+             * @brief   expands the node pointed to by '_first'
+             *          to it's children and inserts them
+             *          at the back of the queue, forming the 
+             *          breadth-first-traversal, node-by-node.
+             *
+             * @returns an iterator to the next node in the
+             *          traversal-sequence.
+             ***************************************************/
+            static constexpr _m_iter_t
+            _s_expand_queue(_m_iter_t _first, _m_queue_t& _queue)
+            {
+                if (_queue.empty())
+                    return _first;
+
+                _first->_m_set();
+                if constexpr (Reversed)
+                    for (_m_node_ptr_t _child :
+                         _m_node_traits_t::_s_children(_first->_m_node)
+                         | std::views::reverse)
+                        _queue.push_back(_m_thunk_t(_child));
+                else
+                    for (_m_node_ptr_t _child :
+                         _m_node_traits_t::_s_children(_first->_m_node))
+                        _queue.push_back(_m_thunk_t(_child));
+                return std::next(_first);
+            }
+        };
+
+        template <traversal Trav, typename NodeT>
+        struct _to_traversal;
+
+        template <typename NodeT>
+        struct _to_traversal<traversal::depth_first_pre_order, NodeT>
+        { using _m_trav_t = _detail::_depth_first_pre_order<false, NodeT>; };
+
+        template <typename NodeT>
+        struct _to_traversal<traversal::depth_first, NodeT>
+        { using _m_trav_t = _detail::_depth_first_pre_order<false, NodeT>; };
+
+        template <typename NodeT>
+        struct _to_traversal<traversal::breadth_first, NodeT>
+        { using _m_trav_t = _detail::_breadth_first<false, NodeT>; };
+
+        template <traversal Trav, typename NodeT>
+        using _to_traversal_t = _to_traversal<Trav, NodeT>::_m_trav_t;
+
         /***************************************************
          * @brief CRTP-base for common functionality
          *        of tree-iterators.
@@ -134,9 +414,7 @@ namespace tl
             constexpr pointer 
             operator->()
                 const _treelib_noexcept
-            {
-                return std::addressof(this->operator*());
-            }
+            { return std::addressof(this->operator*()); }
 
             /***************************************************
              * @brief post-increment operators.
@@ -211,147 +489,6 @@ namespace tl
             { }
         };
 
-        
-        /***************************************************
-         * @brief traversal-type for depth-first-pre-order.
-         ***************************************************/
-        template <typename NodeT>
-        struct _depth_first_pre_order
-        {
-            using _m_node_t = NodeT;
-            using _m_node_traits_t = _node_traits<_m_node_t>;
-
-            using _m_node_ptr_t = typename _m_node_traits_t::_m_ptr_t;
-
-            /***************************************************
-             * @brief   expands the node pointed to by '_first'
-             *          to it's children and inserts them
-             *          just after '_first', forming the depth-
-             *          first-traversal, node-by-node.
-             ***************************************************/
-            static constexpr void
-            _s_expand_queue(std::deque<_m_node_ptr_t>::iterator _first,
-                            std::deque<_m_node_ptr_t>& _queue)
-            {
-                if (_queue.empty())
-                    return;
-
-                for (_m_node_ptr_t _child :
-                     _m_node_traits_t::_s_children(*_first))
-                    // 'drag' the iterator one down after each insert,
-                    // so the order doesn't get reversed
-                    _first = _queue.insert(std::next(_first), _child);
-            }
-        };
-
-
-        /***************************************************
-         * @brief traversal-type for depth-first-post-order.
-         *         
-         *        reverses the order in which children are
-         *        enqueued, forming the mirrored traversal
-         *        of depth-first-pre-order.
-         ***************************************************/
-        template <typename NodeT>
-        struct _depth_first_post_order
-        {
-            using _m_node_t = NodeT;
-            using _m_node_traits_t = _node_traits<_m_node_t>;
-
-            using _m_node_ptr_t = typename _m_node_traits_t::_m_ptr_t;
-
-            /***************************************************
-             * @brief   expands the node pointed to by '_first'
-             *          to it's children and inserts them
-             *          just after '_first', forming the depth-
-             *          first-traversal, node-by-node.
-             ***************************************************/
-            static constexpr void
-            _s_expand_queue(std::deque<_m_node_ptr_t>::iterator _first,
-                            std::deque<_m_node_ptr_t>& _queue)
-            {
-                if (_queue.empty())
-                    return;
-
-                for (_m_node_ptr_t _child :
-                     _m_node_traits_t::_s_children(*_first)
-                     | std::views::reverse)
-                    // 'drag' the iterator one down after each insert,
-                    // so the order doesn't get reversed
-                    _first = _queue.insert(std::next(_first), _child);
-            }
-        };
-
-
-        /***************************************************
-         * @brief traversal-type for breadth-first-in-order.
-         ***************************************************/
-        template <typename NodeT>
-        struct _breadth_first_in_order
-        {
-            using _m_node_t = NodeT;
-            using _m_node_traits_t = _node_traits<_m_node_t>;
-
-            using _m_node_ptr_t = typename _m_node_traits_t::_m_ptr_t;
-
-            /***************************************************
-             * @brief   expands the node pointed to by '_first'
-             *          to it's children and inserts them
-             *          at the back of the queue, forming the 
-             *          breadth-first-traversal, node-by-node.
-             ***************************************************/
-            static constexpr void
-            _s_expand_queue(std::deque<_m_node_ptr_t>::iterator _first,
-                            std::deque<_m_node_ptr_t>& _queue)
-            {
-                if (_queue.empty())
-                    return;
-
-                for (_m_node_ptr_t _child :
-                     _m_node_traits_t::_s_children(*_first))
-                    _queue.push_back(_child);
-            }
-        };
-
-
-        /***************************************************
-         * @brief traversal-type for breadth-first-reverse-order.
-         *
-         *        reverses the order in which children are
-         *        enqueued, forming the mirrored traversal
-         *        of breadth-first-in-order.
-         ***************************************************/
-        template <typename NodeT>
-        struct _breadth_first_reverse_order
-        {
-            using _m_node_t = NodeT;
-            using _m_node_traits_t = _node_traits<_m_node_t>;
-
-            using _m_node_ptr_t = typename _m_node_traits_t::_m_ptr_t;
-
-            /***************************************************
-             * @brief   expands the node pointed to by '_first'
-             *          to it's children and inserts them
-             *          at the back of the queue, forming the 
-             *          breadth-first-traversal, node-by-node.
-             *
-             *          differs from in-order in the reversed
-             *          order in which children are added.
-             ***************************************************/
-            static constexpr void
-            _s_expand_queue(std::deque<_m_node_ptr_t>::iterator _first,
-                            std::deque<_m_node_ptr_t>& _queue)
-            {
-                if (_queue.empty())
-                    return;
-
-                for (_m_node_ptr_t _child :
-                     _m_node_traits_t::_s_children(*_first)
-                     | std::views::reverse)
-                    _queue.push_back(_child);
-            }
-        };
-
 
         /***************************************************
          * @brief interface for retrieving meta-information
@@ -419,17 +556,31 @@ namespace tl
             using typename _m_base_t::_m_node_t;
             using typename _m_base_t::_m_node_ptr_t;
 
+            using _m_thunk_t = _queue_thunk<_m_node_t>;
             using _m_queue_t /* this type is a cutie */ 
-                = std::deque<_m_node_ptr_t>;
-            using _m_queue_iter_t 
-                = typename _m_queue_t::iterator;
+                = std::deque<_m_thunk_t>;
+            using _m_queue_iter_t = typename _m_queue_t::iterator;
 
             _m_queue_t      _m_queue;
             _m_queue_iter_t _m_queue_cur;
-            // keep track of furthest, so no requeue 
-            // happens when going backwards and then forwards again
-            _m_queue_iter_t _m_queue_furthest; 
 
+            /*************************************************************
+             * @brief constructs initial node-queue from the
+             *        sentinel-header node of header_trees.
+             *
+             *        this basically enqueues a valid node-sequence
+             *        starting from the header-node, and then
+             *        takes out the header-node itself, so the
+             *        queue starts/ends with a valid node and nullptr.
+             *************************************************************/
+            constexpr void
+            _m_treat_header()
+            {
+                _m_queue_iter_t _header 
+                    = this->_m_queue_cur;
+                this->_m_enqueue();
+                this->_m_queue.erase(_header);
+            }
 
             constexpr _m_node_ptr_t 
             _m_cur()
@@ -437,26 +588,25 @@ namespace tl
             { 
                 return this->_m_queue_cur == this->_m_queue.end()
                        ? nullptr
-                       : *this->_m_queue_cur;
+                       : this->_m_queue_cur->_m_node;
             }
 
             constexpr void
-            _m_enqueue_and_advance()
+            _m_enqueue()
             {
-                _m_trav_t::_s_expand_queue(this->_m_queue_cur, this->_m_queue);
-                this->_m_queue_furthest = ++this->_m_queue_cur;
+                this->_m_queue_cur
+                    = _m_trav_t::_s_expand_queue(this->_m_queue_cur, this->_m_queue);
             }
 
             constexpr bool
             _m_should_enqueue()
                 const noexcept
-            { return this->_m_queue_cur == this->_m_queue_furthest; }
+            { return !this->_m_queue_cur->_m_expanded; }
 
             constexpr explicit
             _queued_iterator_base(_m_node_ptr_t _node)
-                : _m_queue({_node})
+                : _m_queue({_m_thunk_t(_node)})
                 , _m_queue_cur(_m_queue.begin())
-                , _m_queue_furthest(_m_queue.begin())
             { }
 
         public:
@@ -467,14 +617,13 @@ namespace tl
             _queued_iterator_base()
                 : _m_queue()
                 , _m_queue_cur(this->_m_queue.end())
-                , _m_queue_furthest(this->_m_queue.end())
             { }
 
             constexpr _m_iter_t& 
             operator++()
             { 
                 if (this->_m_should_enqueue())
-                    this->_m_enqueue_and_advance();
+                    this->_m_enqueue();
                 else 
                     ++this->_m_queue_cur;
                 return *this->_m_iter();
@@ -548,18 +697,6 @@ namespace tl
         // using _breadth_first_in_order_queued_iterator 
         //     = _queued_iterator<_breadth_first_in_order<NodeT>>;
     }
-
-    /***************************************************
-     * @brief traversal-type aliases.
-     ***************************************************/
-
-    template <typename NodeT>
-    using depth_first
-        = _detail::_depth_first_pre_order<NodeT>;
-
-    template <typename NodeT>
-    using breadth_first
-        = _detail::_breadth_first_in_order<NodeT>;
 
     /***************************************************
      * @brief iterator-type aliases.
