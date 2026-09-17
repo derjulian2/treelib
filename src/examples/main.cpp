@@ -19,6 +19,18 @@ namespace tl
      *
      * with a depth-first-pre-order traversal of:
      * [ 1, 2, 3, 4, 5, 6, 7 ]
+     * post-order:
+     * [ 1 ]
+     *   ^
+     * [ 2, 5, 1 ]
+     *   ^
+     * [ 3, 4, 2, 5, 1 ]
+     *   ^
+     * [ 3, 4, 2, 5, 1 ]
+     *      ^ 
+     * 
+     *
+     * [ 3, 4, 2, 6, 7, 5, 1 ]
      *
      ***************************************************/
     int outward_binary_tree_tests()
@@ -36,8 +48,14 @@ namespace tl
         tree_type::iterator rl = my_tree.emplace(binary::left, r, 6);
         tree_type::iterator rr = my_tree.emplace(binary::right, r, 7);
 
-        for (const int& i : my_tree)
-            std::println("i: {}", i);
+        // for (const int& i : my_tree)
+        //     std::println("i: {}", i);
+
+        for (queued_iterator it 
+                = my_tree.qbegin<traversal::depth_first_post_order>(); 
+             it != my_tree.end();
+             ++it)
+            std::println("{}", *it);
 
         return 0;
     }

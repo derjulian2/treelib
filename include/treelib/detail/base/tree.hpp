@@ -11,8 +11,6 @@
  *         operating on the respective node-type.
  *
  * @todo   - maybe make _size_base an optional mixin.
- *         - tags/enum for clean interface in 
- *           traversal-selection. 
  ***************************************************/
 
 #include <treelib/detail/bits/except.hpp>
