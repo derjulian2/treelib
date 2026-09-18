@@ -74,7 +74,6 @@ namespace tl
 
             constexpr _m_node_ptr_t
             _m_unhook_at(_m_hook_t at)
-                noexcept
             {
                 if (at >= K)
                     throw modification_error("hook-index out-of-range");
@@ -87,7 +86,7 @@ namespace tl
             _m_unhook_if(_m_node_ptr_t node)
                 noexcept
             {
-                for (_m_cnode_ptr_t& p : this->_m_children_array)
+                for (_m_node_ptr_t& p : this->_m_children_array)
                     if (p == node)
                         { p = nullptr; break; }
             }

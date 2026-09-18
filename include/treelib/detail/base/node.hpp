@@ -188,7 +188,7 @@ namespace tl
 
             constexpr void
             _m_hook_at(_m_hook_t _at, _m_node_ptr_t _node)
-                _treelib_noexcept_if_member(_m_base_t, _m_hook_at)
+            //    _treelib_noexcept_if_member(_m_base_t, _m_hook_at)
             {
                 this->_m_base_t::_m_hook_at(_at, _node);
                 _node->_m_parent = this->_m_node_ptr();
@@ -196,7 +196,7 @@ namespace tl
 
             constexpr _m_node_ptr_t
             _m_unhook_at(_m_hook_t _at)
-                _treelib_noexcept_if_member(_m_base_t, _m_unhook_at)
+            //    _treelib_noexcept_if_member(_m_base_t, _m_unhook_at)
             {
                 _m_node_ptr_t _res = this->_m_base_t::_m_unhook_at(_at);
                 _res->_m_parent = nullptr;
@@ -205,7 +205,7 @@ namespace tl
 
             constexpr void
             _m_unhook_if(_m_node_ptr_t _node)
-                _treelib_noexcept_if_member(_m_base_t, _m_unhook_if)
+            //    _treelib_noexcept_if_member(_m_base_t, _m_unhook_if)
             {
                 this->_m_base_t::unhook_if(_node);
                 _node->_m_parent = nullptr;
@@ -221,7 +221,7 @@ namespace tl
 
             constexpr void
             _m_unhook()
-                _treelib_noexcept_if_member(_m_base_t, _m_unhook_if)
+            //    _treelib_noexcept_if_member(_m_base_t, _m_unhook_if)
             {
                 this->_m_parent->_m_base_t::_m_unhook_if(this);
                 this->_m_parent = nullptr;

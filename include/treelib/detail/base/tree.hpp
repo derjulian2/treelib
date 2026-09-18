@@ -655,7 +655,7 @@ namespace tl
             constexpr _outward_tree_mixin&
             operator=(_outward_tree_mixin&& other)
             {
-
+                return *this;
             }
 
             /***************************************************
