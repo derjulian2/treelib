@@ -48,14 +48,58 @@
  *******************************************************************************************/
 
 #include <treelib/detail/bits/except.hpp>
+#include <treelib/detail/base/node.hpp>
 
 #include <concepts>
 #include <ranges>
+#include <cassert>
 
 namespace tl
 {
     namespace _detail
     {
+        /*************************************************************
+         * @brief ranges-convenience methods for
+         *        accessing first/last element.
+         *
+         *        std::ranges::begin and
+         *        std::ranges::end don't work on
+         *        object-types (e.g. filter_view),
+         *        these methods bind the view to
+         *        an lvalue and return the first
+         *        element either way.
+         *
+         *        i am not sure if there is a
+         *        reason against doing this, i think
+         *        there is a reason the std works
+         *        this way (with filter_view's .begin()
+         *        mutating state and ranges::begin requirements).
+         *        i have some .children() methods returning
+         *        filter_view-objects, so this workaround does what i
+         *        want for now.
+         *************************************************************/
+
+        template <std::ranges::range R>
+        constexpr decltype(auto)
+        _s_range_front(R&& r)
+        {
+            assert(!std::ranges::empty(r)); 
+            return *std::ranges::begin(r); 
+        }
+
+        template <std::ranges::range R>
+        constexpr decltype(auto)
+        _s_range_back(R&& r)
+        { 
+            assert(!std::ranges::empty(r));
+            return *std::prev(std::ranges::end(r)); 
+        }
+
+        template <std::ranges::range R>
+        constexpr std::size_t
+        _s_range_size(R&& r)
+        { return std::ranges::size(r); }
+
         /*****************************************
          * @brief requirements of a node-type to
          *        be used in a tree-container.
@@ -205,6 +249,13 @@ namespace tl
             using _m_hook_t  = _m_node_t::_m_hook_t;
             using _m_depth_t = std::size_t;
 
+            template <typename ValueT>
+            using _m_vnode_t      = _value_node<_m_node_t, ValueT>;
+            template <typename ValueT>
+            using _m_vnode_ptr_t  = _m_vnode_t<ValueT>*;
+            template <typename ValueT>
+            using _m_cvnode_ptr_t = const _m_vnode_t<ValueT>*;
+
             /***************************************************
              * @brief information.
              ***************************************************/
@@ -238,7 +289,7 @@ namespace tl
             static constexpr std::size_t
             _s_child_count(_m_cptr_t _node)
                 noexcept
-            { return std::ranges::size(_node->_m_children()); }
+            { return _s_range_size(_node->_m_children()); }
 
             /***************************************************
              * @brief hook-functionality.
@@ -273,7 +324,7 @@ namespace tl
             {
                 if (_s_is_leaf(_node))
                     return nullptr;
-                return *std::ranges::begin(_s_children(_node));
+                return _s_range_front(_s_children(_node));
             }
 
             static constexpr _m_cptr_t
@@ -281,7 +332,7 @@ namespace tl
             {
                 if (_s_is_leaf(_node))
                     return nullptr;
-                return *std::ranges::begin(_s_children(_node));
+                return _s_range_front(_s_children(_node));
             }
 
             static constexpr _m_ptr_t
@@ -289,7 +340,7 @@ namespace tl
             {
                 if (_s_is_leaf(_node))
                     return nullptr;
-                return *(std::ranges::end(_s_children(_node)) - 1);
+                return _s_range_back(_s_children(_node));
             }
 
             static constexpr _m_cptr_t
@@ -297,8 +348,20 @@ namespace tl
             {
                 if (_s_is_leaf(_node))
                     return nullptr;
-                return *(std::ranges::end(_s_children(_node)) - 1);
+                return _s_range_back(_s_children(_node));
             }
+
+            /***************************************************
+             * @brief child-information.
+             ***************************************************/
+
+            static constexpr bool
+            _s_is_first_child_of(_m_cptr_t _parent, _m_cptr_t _node)
+            { return _s_first_child(_parent) == _node; }
+
+            static constexpr bool
+            _s_is_last_child_of(_m_cptr_t _parent, _m_cptr_t _node)
+            { return _s_last_child(_parent) == _node; }
 
             /***************************************************
              * @brief sibling accessors.
@@ -354,6 +417,14 @@ namespace tl
 
             static constexpr bool
             _s_constness = std::is_const_v<std::remove_reference_t<_m_ref_t>>;
+
+            static constexpr _m_iter_t
+            _s_root_begin(_m_node_ptr_t _node)
+            { return _m_iter_t::_s_root_begin(_node); }
+
+            static constexpr _m_iter_t
+            _s_header_begin(_m_node_ptr_t _node)
+            { return _m_iter_t::_s_header_begin(_node); }
 
             static constexpr _m_iter_t
             _s_to_iter(_m_node_ptr_t _node)

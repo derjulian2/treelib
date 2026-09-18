@@ -105,18 +105,14 @@ namespace tl
 
             template <typename IterT>
             static constexpr IterT
-            _s_begin(_m_node_ptr_t _node)
+            _s_root_begin(_m_node_ptr_t _node)
                 noexcept(std::is_nothrow_copy_constructible_v<IterT>)
             { return _iter_traits<IterT>::_s_to_iter(_node); }
 
             template <typename IterT>
             static constexpr IterT
             _s_header_begin(_m_node_ptr_t _node)
-            { 
-                IterT _it = _iter_traits<IterT>::_s_to_iter(_node);
-                // somehow construct without header ???
-                return _it; 
-            }
+            { return std::next(_iter_traits<IterT>::_s_to_iter(_node)); }
 
             /***************************************************
              * @brief   expands the node pointed to by '_first'
@@ -131,19 +127,20 @@ namespace tl
             _s_expand_queue(_m_iter_t _first, _m_queue_t& _queue)
             {
                 _first->_m_set();
-                _m_iter_t _res = _first;
+                _m_iter_t _next = std::next(_first);
                 // 'drag' the iterator one down after each 
-                // insert, to insert sequentially
+                // insert, to insert sequentially after _first
                 if constexpr (Reversed)
                     for (_m_node_ptr_t _child :
                          _m_node_traits_t::_s_children(_first->_m_node)
                          | std::views::reverse)
-                        _queue.insert(++_first, _m_thunk_t(_child));
+                         _queue.emplace(_next, _child);
                 else
                     for (_m_node_ptr_t _child :
                          _m_node_traits_t::_s_children(_first->_m_node))
-                         _queue.insert(++_first, _m_thunk_t(_child));
-                return std::next(_res);
+                         _queue.emplace(_next, _child);
+                // return first-child or next
+                return std::next(_first);
             }
         };
 
@@ -167,9 +164,43 @@ namespace tl
             using _m_queue_t = std::list<_m_thunk_t>;
             using _m_iter_t  = typename _m_queue_t::iterator;
 
+            template <typename IterT>
+            static constexpr IterT
+            _s_root_begin(_m_node_ptr_t _node)
+                noexcept(std::is_nothrow_copy_constructible_v<IterT>)
+            { return std::next(_iter_traits<IterT>::_s_to_iter(_node)); }
+
+            template <typename IterT>
+            static constexpr IterT
+            _s_header_begin(_m_node_ptr_t _node)
+            { return std::next(_iter_traits<IterT>::_s_to_iter(_node)); }
+
+            /***************************************************
+             * @brief if _node is the last child of it's
+             *        sibling-chain, the correct post-order
+             *        traversal may require the next node
+             *        to be expanded before handing off to
+             *        the parent-node.
+             ***************************************************/
+            static constexpr _m_iter_t
+            _s_maybe_expand_next(_m_iter_t _node, _m_queue_t& _queue)
+            {
+                _m_iter_t _maybe_parent = std::next(_node);
+                if (_maybe_parent != _queue.end()
+                    && _m_node_traits_t::_s_is_last_child_of(_maybe_parent->_m_node, _node->_m_node))
+                {
+                    _m_iter_t _unexpanded = std::find_if(std::next(_maybe_parent), _queue.end(),
+                                                         [](const _m_thunk_t& _t) { return !_t._m_expanded; });
+                    if (_unexpanded != _queue.end())
+                        _s_expand_queue(_unexpanded, _queue);
+                }
+                return _maybe_parent;
+            }
+
             /***************************************************
              * @brief   expands the node pointed to by '_first'
-             *          to 
+             *          recursively to it's children until a
+             *          leaf-node is found.
              *
              * @returns an iterator to the next node in the
              *          traversal-sequence.
@@ -177,60 +208,34 @@ namespace tl
             static constexpr _m_iter_t
             _s_expand_queue(_m_iter_t _first, _m_queue_t& _queue)
             {
-                // this traverses the entire tree right-away instead
-                // of building the queue progressively. currently, i don't
-                // have a better solution. maybe the one below.
-                // _first->_m_set();
-                // if constexpr (Reversed)
-                //     for (_m_node_ptr_t _child :
-                //          _m_node_traits_t::_s_children(_first->_m_node)
-                //          | std::views::reverse)
-                //         _s_expand_queue(_queue.insert(_first, _m_thunk_t(_child)), _queue);
-                // else
-                //     for (_m_node_ptr_t _child :
-                //          _m_node_traits_t::_s_children(_first->_m_node))
-                //         _s_expand_queue(_queue.insert(_first, _m_thunk_t(_child)), _queue);
-
-                if (_first == _queue.end())
-                    return _first;
-
                 _first->_m_set();
-                if (_m_node_traits_t::_s_is_leaf(_first->_m_node))   
-                {
-                    // probably won't work in all cases
-                    _m_iter_t _next = std::find_if(std::next(_first), _queue.end(),
-                                        [](_m_thunk_t& _t) { return !_t._m_expanded; });
-                    _s_expand_queue(_next, _queue);
-                    return std::next(_first);
-                }
+                if (_m_node_traits_t::_s_is_leaf(_first->_m_node))
+                    return _s_maybe_expand_next(_first, _queue);
 
-                // capture first-child for recursive search
+                // capture iterator to first-child for recursive search
                 bool _first_child = true;
+            #define _treelib_insert_capture_first(_varname, _where) \
+                { if (_first_child) \
+                { _varname = _queue.emplace(_where, _child); _first_child = false; } \
+                else \
+                { _queue.emplace(_where, _child); } }
+                
                 _m_iter_t _res;
                 if constexpr (Reversed)
                     for (_m_node_ptr_t _child :
                          _m_node_traits_t::_s_children(_first->_m_node)
                          | std::views::reverse)
-                    {
-                        if (_first_child) 
-                        { _res = _queue.insert(_first, _m_thunk_t(_child)); _first_child = false; }
-                        else
-                        { _queue.insert(_first, _m_thunk_t(_child)); }
-                    } 
+                        _treelib_insert_capture_first(_res, _first)
                 else
                     for (_m_node_ptr_t _child :
                          _m_node_traits_t::_s_children(_first->_m_node))
-                    {
-                        if (_first_child) 
-                        { _res = _queue.insert(_first, _m_thunk_t(_child)); _first_child = false; }
-                        else
-                        { _queue.insert(_first, _m_thunk_t(_child)); }
-                    } 
-                // recursively insert, because post-order
-                // visits the deepest first
-                if (_m_node_traits_t::_s_is_leaf(_res->_m_node))
-                { _res->_m_set(); return _res; }
-                return _s_expand_queue(_res, _queue);
+                        _treelib_insert_capture_first(_res, _first)
+        
+            #undef _treelib_capture_first
+                // keep expanding until first-child is a leaf
+                if (!_m_node_traits_t::_s_is_leaf(_res->_m_node))
+                    return _s_expand_queue(_res, _queue);
+                return _res;
             }
         };
 
@@ -311,6 +316,17 @@ namespace tl
             using _m_queue_t = std::list<_m_thunk_t>;
             using _m_iter_t  = typename _m_queue_t::iterator;
 
+            template <typename IterT>
+            static constexpr IterT
+            _s_root_begin(_m_node_ptr_t _node)
+                noexcept(std::is_nothrow_copy_constructible_v<IterT>)
+            { return _iter_traits<IterT>::_s_to_iter(_node); }
+
+            template <typename IterT>
+            static constexpr IterT
+            _s_header_begin(_m_node_ptr_t _node)
+            { return std::next(_iter_traits<IterT>::_s_to_iter(_node)); }
+
             /***************************************************
              * @brief   expands the node pointed to by '_first'
              *          to it's children and inserts them
@@ -323,22 +339,24 @@ namespace tl
             static constexpr _m_iter_t
             _s_expand_queue(_m_iter_t _first, _m_queue_t& _queue)
             {
-                if (_queue.empty())
-                    return _first;
-
                 _first->_m_set();
                 if constexpr (Reversed)
                     for (_m_node_ptr_t _child :
                          _m_node_traits_t::_s_children(_first->_m_node)
                          | std::views::reverse)
-                        _queue.push_back(_m_thunk_t(_child));
+                        _queue.emplace_back(_child);
                 else
                     for (_m_node_ptr_t _child :
                          _m_node_traits_t::_s_children(_first->_m_node))
-                        _queue.push_back(_m_thunk_t(_child));
+                        _queue.emplace_back(_child);
                 return std::next(_first);
             }
         };
+
+        /***************************************************
+         * @brief type-trait to convert interface-enum
+         *        to traversal-implementation-type.
+         ***************************************************/
 
         template <traversal Trav, typename NodeT>
         struct _to_traversal;
@@ -348,20 +366,42 @@ namespace tl
         { using _m_trav_t = _detail::_depth_first_pre_order<false, NodeT>; };
 
         template <typename NodeT>
+        struct _to_traversal<traversal::depth_first_reverse_pre_order, NodeT>
+        { using _m_trav_t = _detail::_depth_first_pre_order<true, NodeT>; };
+
+        template <typename NodeT>
         struct _to_traversal<traversal::depth_first_in_order, NodeT>
         { using _m_trav_t = _detail::_depth_first_in_order<false, NodeT>; };
+
+        template <typename NodeT>
+        struct _to_traversal<traversal::depth_first_reverse_in_order, NodeT>
+        { using _m_trav_t = _detail::_depth_first_in_order<true, NodeT>; };
 
         template <typename NodeT>
         struct _to_traversal<traversal::depth_first_post_order, NodeT>
         { using _m_trav_t = _detail::_depth_first_post_order<false, NodeT>; };
 
         template <typename NodeT>
+        struct _to_traversal<traversal::depth_first_reverse_post_order, NodeT>
+        { using _m_trav_t = _detail::_depth_first_post_order<true, NodeT>; };
+
+        template <typename NodeT>
         struct _to_traversal<traversal::depth_first, NodeT>
         { using _m_trav_t = _detail::_depth_first_pre_order<false, NodeT>; };
+
+
+        template <typename NodeT>
+        struct _to_traversal<traversal::breadth_first_in_order, NodeT>
+        { using _m_trav_t = _detail::_breadth_first<false, NodeT>; };
+
+        template <typename NodeT>
+        struct _to_traversal<traversal::breadth_first_reverse_order, NodeT>
+        { using _m_trav_t = _detail::_breadth_first<true, NodeT>; };
 
         template <typename NodeT>
         struct _to_traversal<traversal::breadth_first, NodeT>
         { using _m_trav_t = _detail::_breadth_first<false, NodeT>; };
+
 
         template <traversal Trav, typename NodeT>
         using _to_traversal_t = _to_traversal<Trav, NodeT>::_m_trav_t;
@@ -627,22 +667,16 @@ namespace tl
             _m_queue_t      _m_queue;
             _m_queue_iter_t _m_queue_cur;
 
-            /*************************************************************
-             * @brief constructs initial node-queue from the
-             *        sentinel-header node of header_trees.
-             *
-             *        this basically enqueues a valid node-sequence
-             *        starting from the header-node, and then
-             *        takes out the header-node itself, so the
-             *        queue starts/ends with a valid node and nullptr.
-             *************************************************************/
-            constexpr void
-            _m_treat_header()
-            {
-                _m_queue_iter_t _header 
-                    = this->_m_queue_cur;
-                this->_m_enqueue();
-                this->_m_queue.erase(_header);
+            static constexpr _m_iter_t
+            _s_root_begin(_m_node_ptr_t _node)
+            { return _m_trav_t::template _s_root_begin<_m_iter_t>(_node); }
+
+            static constexpr _m_iter_t
+            _s_header_begin(_m_node_ptr_t _node)
+            { 
+                _m_iter_t _res = _m_trav_t::template _s_header_begin<_m_iter_t>(_node);
+                std::erase_if(_res._m_queue, [&](const _m_thunk_t& _t) { return _t._m_node == _node; });
+                return _res;
             }
 
             constexpr _m_node_ptr_t 
@@ -780,9 +814,13 @@ namespace tl
     using queued_iterator
         = _detail::_queued_iterator<IsConst, ValueT, TraversalT>;
 
-    // template <bool IsConst, typename ValueT, typename NodeT>
-    // using depth_first_queued_iterator 
-    //     = _detail::;
+    template <bool IsConst, typename ValueT, typename NodeT>
+    using queued_depth_first_iterator
+        = queued_iterator<IsConst, ValueT, _detail::_depth_first_pre_order<false, NodeT>>;
+
+    template <bool IsConst, typename ValueT, typename NodeT>
+    using queued_depth_first_post_order_iterator
+        = queued_iterator<IsConst, ValueT, _detail::_depth_first_post_order<false, NodeT>>;
 
     // template <typename NodeT>
     // using depth_first_queued_iterator 

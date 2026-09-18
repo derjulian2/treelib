@@ -239,13 +239,13 @@ namespace tl
             using _m_hook_t = typename _m_node_traits_t::_m_hook_t;
 
             constexpr
-            void _m_do_erase(_m_node_ptr_t _node)
+            void _m_erase_children(_m_node_ptr_t _node)
                 noexcept
             {
                 assert(_node != nullptr);
                 for (_m_node_ptr_t _child 
                      : _m_node_traits_t::_s_children(_node))
-                    this->_m_do_erase(_child);
+                    this->_m_erase_children(_child);
                 this->_m_put_node(static_cast<_m_vnode_ptr_t>(_node));
                 this->_m_dec_size();
             }
@@ -265,6 +265,36 @@ namespace tl
             {
                 *dest = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(src)->value());
                 _m_node_traits_t::_s_mimic((*dest), src, [&](auto... args) { this->_m_insert_from_copy(std::forward(args)...); });
+            }
+
+            static constexpr bool 
+            _s_compare(_m_cvnode_ptr_t _a, _m_cvnode_ptr_t _b)
+            { return _a->_m_get_value() != _b->_m_get_value(); }
+
+            static constexpr bool 
+            _s_compare_children(_m_cnode_ptr_t _a, _m_cnode_ptr_t _b)
+            {
+                decltype(auto) _a_children = _m_node_traits_t::_s_children(_a);
+                decltype(auto) _b_children = _m_node_traits_t::_s_children(_b);
+                
+                if (_m_node_traits_t::_s_child_count(_a)
+                    != _m_node_traits_t::_s_child_count(_b))
+                    return false;
+
+                auto _a_beg = std::ranges::begin(_a_children);
+                auto _a_end = std::ranges::end(_a_children);
+                auto _b_beg = std::ranges::begin(_b_children);
+                auto _b_end = std::ranges::end(_b_children);
+
+                for (;_a_beg != _a_end && _b_beg != _b_end; ++_a_beg, ++_b_beg)
+                {
+                    _m_cvnode_ptr_t _a_child = static_cast<_m_cvnode_ptr_t>(*_a_beg);
+                    _m_cvnode_ptr_t _b_child = static_cast<_m_cvnode_ptr_t>(*_b_beg);
+                    if (!_s_compare(_a_child, _b_child)
+                        || !_s_compare_children(_a_child, _b_child))
+                        return false;
+                }
+                return true;
             }
 
         public:
@@ -298,6 +328,7 @@ namespace tl
             using typename _m_base_t::_m_node_t;
             using typename _m_base_t::_m_node_ptr_t;
             using typename _m_base_t::_m_cnode_ptr_t;
+            using typename _m_base_t::_m_cvnode_ptr_t;
             using typename _m_base_t::_m_size_t;
             using typename _m_base_t::_m_node_traits_t;
             using typename _m_base_t::_m_alloc_t;
@@ -312,12 +343,17 @@ namespace tl
                 this->_m_size_base_t::_m_reset();
             }
 
+            constexpr _m_node_ptr_t
+            _m_root_node()
+                const noexcept
+            { return this->_m_root; }
+
             template <typename IterT>
             constexpr IterT
-            _m_root_iter()
-                const noexcept
-            { return _iter_traits<IterT>::_s_to_iter(this->_m_root); }
-
+            _m_begin()
+                const
+            { return _iter_traits<IterT>::_s_root_begin(this->_m_root_node()); }
+            
         public:
 
             using typename _m_base_t::value_type;
@@ -391,8 +427,29 @@ namespace tl
             clear() 
                 noexcept
             {
-                this->_m_do_erase(this->_m_root);
+                this->_m_erase_children(this->_m_root);
                 this->_m_reset();
+            }
+
+            /***************************************************
+             * @brief compares trees based on their structure
+             *        and values held inside the nodes.
+             *        
+             *        trees compare equal if their structure
+             *        is equal and each node has the same value
+             *        than it's 'structural counterpart' in the
+             *        other tree (i.e. rootA same rootB, first-childA
+             *        same as first-childB, ...).
+             ***************************************************/
+            template <typename OtherAllocT>
+            friend constexpr bool
+            operator==(const _root_base& a,
+                       const _root_base<_m_node_t, OtherAllocT>& b)
+            { 
+                return _m_base_t::_s_compare(
+                            static_cast<_m_cvnode_ptr_t>(a._m_root_node()), 
+                            static_cast<_m_cvnode_ptr_t>(b._m_root_node()))
+                    && _m_base_t::_s_compare_children(a._m_root_node(), b._m_root_node()); 
             }
         };
 
@@ -403,7 +460,7 @@ namespace tl
          *
          *        this is convenient for e.g. rose-trees, in which
          *        a construct without a header-node could
-         *        lead to an invalid tree-state or node-leaks.
+         *        lead to an invalid tree-state/node-leaks.
          *
          *        for example, if you would insert a
          *        next-sibling at the value-holding root-node,
@@ -435,23 +492,26 @@ namespace tl
             void _m_reset()
                 noexcept
             {
-                this->_m_header._m_reset();
                 this->_m_size_base_t::_m_reset();
             }
 
-            template <typename IterT>
-            constexpr IterT
-            _m_root_iter()
+            constexpr _m_node_ptr_t
+            _m_root_node()
                 const noexcept
             { 
                 // casting constness away here is OK because if a mutable
                 // iterator is constructed, this is non-const anyway and
                 // if a const-iterator is constructed, the iterator does not
                 // expose the node directly, so constness is restored (i hope).
-                return _m_node_traits_t::template _s_to_iter<IterT>(
-                    const_cast<_m_node_ptr_t>(std::addressof(this->_m_header))); 
+                return const_cast<_m_node_ptr_t>(std::addressof(this->_m_header)); 
             }
         
+            template <typename IterT>
+            constexpr IterT
+            _m_begin()
+                const
+            { return _iter_traits<IterT>::_s_header_begin(this->_m_root_node()); }
+
         public:
 
             using _m_base_t::_m_base_t;
@@ -470,9 +530,25 @@ namespace tl
             {
                 for (_m_node_ptr_t _child 
                      : _m_node_traits_t::_s_children(std::addressof(this->_m_header)))
-                    this->_m_do_erase(_child);
+                    this->_m_erase_children(_child);
                 this->_m_reset();
             }
+
+            /***************************************************
+             * @brief compares trees based on their structure
+             *        and values held inside the nodes.
+             *        
+             *        trees compare equal if their structure
+             *        is equal and each node has the same value
+             *        than it's 'structural counterpart' in the
+             *        other tree (i.e. rootA same rootB, first-childA
+             *        same as first-childB, ...).
+             ***************************************************/
+            template <typename OtherAllocT>
+            friend constexpr bool
+            operator==(const _header_base& a,
+                       const _header_base<_m_node_t, OtherAllocT>& b)
+            { return _m_base_t::_s_compare_children(a._m_root_node(), b._m_root_node()); }
         };
 
 
@@ -599,7 +675,7 @@ namespace tl
              ***************************************************/
             constexpr iterator 
             root()
-            { return this->template _m_root_iter<iterator>(); }
+            { return _iter_traits<iterator>::_s_to_iter(this->_m_root_node()); }
 
             /***************************************************
              * @returns an iterator to the root-node of the tree.
@@ -607,7 +683,7 @@ namespace tl
             constexpr const_iterator 
             croot()
                 const
-            { return this->template _m_root_iter<const_iterator>(); }
+            { return _iter_traits<const_iterator>::_s_to_iter(this->_m_root_node()); }
 
             /***************************************************
              * @returns a queued iterator to the beginning, 
@@ -617,13 +693,13 @@ namespace tl
             template <traversal Trav>
             constexpr queued_iterator<Trav>
             qbegin()
-            { return this->root(); }
+            { return this->template _m_begin<queued_iterator<Trav>>(); }
 
             template <traversal Trav>
-            constexpr queued_iterator<Trav>
+            constexpr const_queued_iterator<Trav>
             cqbegin()
                 const
-            { return this->croot(); }
+            { return this->template _m_begin<const_queued_iterator<Trav>>(); }
 
             /***************************************************
              * @returns an iterator to the beginning, using
@@ -657,6 +733,24 @@ namespace tl
             cend()
                 const noexcept
             { return _iter_traits<const_iterator>::_s_to_iter(nullptr); }
+
+            /***************************************************
+             * @returns an iterator to the end.
+             ***************************************************/
+            template <traversal Trav>
+            constexpr queued_iterator<Trav>
+            qend()
+                noexcept
+            { return _iter_traits<queued_iterator<Trav>>::_s_to_iter(nullptr); }
+
+            /***************************************************
+             * @returns an iterator to the end.
+             ***************************************************/
+            template <traversal Trav>
+            constexpr const_queued_iterator<Trav>
+            cqend()
+                const noexcept
+            { return _iter_traits<const_queued_iterator<Trav>>::_s_to_iter(nullptr); }
 
             /***************************************************
              * modifiers.
@@ -732,21 +826,6 @@ namespace tl
             {
 
             }
-
-            /***************************************************
-             * @brief lexicographically compares the 
-             *        values of two trees.
-             * @note  this ignores the tree's actual hierarchical
-             *        structure. need to implement a true tree-compare.
-             ***************************************************/
-        
-            // friend constexpr bool
-            // operator==(const _outward_tree_mixin& a,
-            //            const _outward_tree_mixin& b)
-            // {
-            //     return std::lexicographical_compare(a.cbegin(), a.cend(),
-            //                                         b.cbegin(), b.cend());
-            // }
         };
 
 

@@ -92,7 +92,7 @@ namespace tl
                         { p = nullptr; break; }
             }
 
-            constexpr auto
+            constexpr decltype(auto)
             _m_children()
                 noexcept
             {
@@ -102,7 +102,7 @@ namespace tl
                        { return p != nullptr; });
             }
 
-            constexpr auto
+            constexpr decltype(auto)
             _m_children()
                 const noexcept
             {

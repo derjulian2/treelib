@@ -230,7 +230,6 @@ namespace tl
             _m_is_last()
                 const noexcept
             {
-                assert(!this->_m_is_root());
                 return false;
             }
 
@@ -238,7 +237,6 @@ namespace tl
             _m_is_first()
                 const noexcept
             {
-                assert(!this->_m_is_root());
                 return false;
             }
 
@@ -290,7 +288,6 @@ namespace tl
             _m_is_last()
                 const noexcept
             {
-                assert(!this->_m_is_root());
                 return false;
             }
 
@@ -298,7 +295,6 @@ namespace tl
             _m_is_first()
                 const noexcept
             {
-                assert(!this->_m_is_root());
                 return false;
             }
 
@@ -351,6 +347,12 @@ namespace tl
               typename Allocator = std::allocator<T>>
     using listrose_tree
         = _detail::_header_tree<_detail::_bidirectional_listrose_node, Allocator>;
+
+
+
+    template <typename T,
+              typename Allocator = std::allocator<T>>
+    using outward_rose_tree = outward_vecrose_tree<T, Allocator>;
 
     template <typename T,
               typename Allocator = std::allocator<T>>
