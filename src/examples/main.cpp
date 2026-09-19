@@ -231,7 +231,6 @@ namespace tl
         // assert(my_tree_copy == my_tree);
 
         std::println("{} :: information-tests passed", __FUNCTION__);
-
     }
 }
 

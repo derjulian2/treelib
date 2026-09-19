@@ -259,14 +259,13 @@ namespace tl
              * @brief information.
              ***************************************************/
 
-            static constexpr bool
-            _s_is_leaf(_m_cptr_t _node)
-            //    _treelib_noexcept_if_const_member(_m_node_t, _m_children)
+            static constexpr bool _s_is_leaf(_m_cptr_t _node)
+                _treelib_noexcept_if_member(const _m_node_t&, _m_children)
             { return std::ranges::empty(_node->_m_children()); }
 
             static constexpr bool
             _s_is_root(_m_cptr_t _node)
-            //    _treelib_noexcept_if_const_member(_m_node_t, _m_get_parent)
+                _treelib_noexcept_if_member(const _m_node_t&, _m_get_parent)
                 requires _parent_node<_m_node_t>
             { return _node->_m_get_parent() == nullptr; }
 
@@ -276,7 +275,7 @@ namespace tl
                 _treelib_noexcept_if_member(_m_node_t, _m_get_depth)
             { return _node->_m_get_depth() }
         #else
-            //    _treelib_noexcept_if_const_member(_m_node_t, _m_get_parent)
+                _treelib_noexcept_if_member(const _m_node_t&, _m_get_parent)
             {
                 _m_depth_t _res { 0 };
                 while ((_node = _node->_m_get_parent()))
@@ -434,7 +433,7 @@ namespace tl
             _s_to_node(const _m_iter_t& _iter)
                 noexcept
             { 
-                static_assert(_treelib_member_const_noexcept(_m_iter_t, _m_cur),
+                static_assert(_treelib_is_member_noexcept(_m_iter_t, _m_cur),
                     "current-node accessor should not throw");
                 return _iter._m_cur(); 
             }
