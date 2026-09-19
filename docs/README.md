@@ -72,6 +72,8 @@ great open-source projects that i wish to credit here:
     - [stl_list.h](https://github.com/gcc-mirror/gcc/blob/master/libstdc%2B%2B-v3/include/bits/stl_list.h)
     - [stl_forward_list.h](https://github.com/gcc-mirror/gcc/blob/master/libstdc%2B%2B-v3/include/bits/forward_list.h)
     - [stl_tree.h](https://github.com/gcc-mirror/gcc/blob/master/libstdc%2B%2B-v3/include/bits/stl_tree.h)
+- [recursive-macros](https://www.scs.stanford.edu/~dm/blog/va-opt.html) an article on using C++20 `__VA_OPT__`
+  to implement recursive/folding macros.
 
 it is truly insane to me how there are so many committed and passionate people out there developing
-free open-source software. thanks to all of you, i was able to learn.
+free open-source software. thanks to all of you, i was able to learn something.
