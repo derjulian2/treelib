@@ -55,15 +55,19 @@ namespace tl
 
             std::vector<_m_node_ptr_t> _m_child_vec;
 
+            constexpr _m_node_ptr_t
+            _m_node_ptr()
+                noexcept
+            { return static_cast<_m_node_ptr_t>(this); }
+
+            constexpr _m_cnode_ptr_t
+            _m_node_ptr()
+                const noexcept
+            { return static_cast<_m_cnode_ptr_t>(this); }
 
             _vecrose_node_base()
                 : _m_child_vec()
             { }
-            
-            constexpr bool
-            _m_is_leaf()
-                const noexcept
-            { return this->_m_child_vec.empty(); }
 
             constexpr void
             _m_hook_at(_m_hook_t _at, _m_node_ptr_t _node)
@@ -143,9 +147,14 @@ namespace tl
             template <typename Fn>
                 requires std::invocable<Fn, _m_hook_t, _m_node_ptr_t, _m_cnode_ptr_t>
             constexpr void
-            _m_mimic(_m_cnode_ptr_t src, Fn&& insert_fn)
+            _m_mimic(_m_cnode_ptr_t _src, Fn&& _insert_fn)
             {
-
+                for (_m_cnode_ptr_t _child
+                     : _src->_m_children())
+                {
+                    _insert_fn(vrose::last, this->_m_node_ptr(), _child);
+                    this->_m_child_vec.back()->_m_mimic(_child, std::forward<Fn>(_insert_fn));
+                }
             }
         };
 
@@ -215,7 +224,7 @@ namespace tl
             template <typename Fn>
                 requires std::invocable<Fn, _m_hook_t, _m_node_ptr_t, _m_cnode_ptr_t>
             constexpr void
-            _m_mimic(_m_cnode_ptr_t src, Fn&& insert_fn)
+            _m_mimic(_m_cnode_ptr_t _src, Fn&& _insert_fn)
             {
 
             }
@@ -235,48 +244,6 @@ namespace tl
 
             constexpr
             _bidirectional_vecrose_node() = default;
-
-            constexpr bool
-            _m_is_last()
-                const noexcept
-            {
-                return false;
-            }
-
-            constexpr bool
-            _m_is_first()
-                const noexcept
-            {
-                return false;
-            }
-
-            constexpr _m_node_ptr_t
-            _m_next_sibling()
-                noexcept
-            {
-                return nullptr;
-            }
-
-            constexpr _m_cnode_ptr_t
-            _m_next_sibling()
-                const noexcept
-            {
-                return nullptr;
-            }
-
-            constexpr _m_node_ptr_t
-            _m_prev_sibling()
-                noexcept
-            {
-                return nullptr;
-            }
-
-            constexpr _m_cnode_ptr_t
-            _m_prev_sibling()
-                const noexcept
-            {
-                return nullptr;
-            }
         };
 
         struct _listrose_node

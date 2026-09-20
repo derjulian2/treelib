@@ -39,6 +39,16 @@ namespace tl
 
             static constexpr std::size_t _s_arity = K;
 
+            constexpr _m_node_ptr_t
+            _m_node_ptr()
+                noexcept
+            { return static_cast<_m_node_ptr_t>(this); }
+
+            constexpr _m_cnode_ptr_t
+            _m_node_ptr()
+                const noexcept
+            { return static_cast<_m_cnode_ptr_t>(this); }
+
             /***************************************************
              * constructor (1).
              * default-constructible,
@@ -102,37 +112,26 @@ namespace tl
 
             constexpr decltype(auto)
             _m_children()
-                noexcept
-            {
-                return this->_m_children_array
-                       | std::views::filter
-                       ([](_m_node_ptr_t p) 
-                       { return p != nullptr; });
-            }
-
-            constexpr decltype(auto)
-            _m_children()
                 const noexcept
             {
                 return this->_m_children_array
-                       | std::views::filter
-                       ([](_m_cnode_ptr_t p) 
-                        { return p != nullptr; });
+                       | std::views::filter([](_m_cnode_ptr_t p) 
+                                            { return p != nullptr; });
             }
 
             template <typename Fn>
                 requires std::invocable<Fn, _m_hook_t, _m_node_ptr_t, _m_cnode_ptr_t>
             constexpr void
-            _m_mimic(_m_cnode_ptr_t src, Fn&& insert_fn)
+            _m_mimic(_m_cnode_ptr_t _src, Fn&& _insert_fn)
             {
-                for (_m_hook_t at = 0; at < K; ++at)
+                for (_m_hook_t _at = 0; _at < K; ++_at)
                 {
-                    _m_cnode_ptr_t cur = src->_m_children_array[at];
+                    _m_cnode_ptr_t cur = _src->_m_children_array[_at];
                     if (cur != nullptr)
                     {
-                        insert_fn(at, this, cur); // assume that .hook_at will be called
-                        assert(this->_m_children_array[at] != nullptr);
-                        this->_m_children_array[at]->_m_mimic(cur, std::forward<Fn>(insert_fn));
+                        _insert_fn(_at, this->_m_node_ptr(), cur); // assume that .hook_at will be called
+                        assert(this->_m_children_array[_at] != nullptr);
+                        this->_m_children_array[_at]->_m_mimic(cur, std::forward<Fn>(_insert_fn));
                     }
                 }
             }
@@ -189,14 +188,14 @@ namespace tl
             constexpr bool
             _m_is_root()
                 const noexcept
-            { return this->_m_parent == nullptr; }
+            { return this->_m_parent() == nullptr; }
 
             constexpr bool
             _m_is_last()
                 const noexcept
             {
                 assert(!this->_m_is_root());
-                return this->_m_get_parent()->_m_children_array.back() == this;
+                return this->_m_parent()->_m_children_array.back() == this;
             }
 
             constexpr bool
@@ -204,53 +203,30 @@ namespace tl
                 const noexcept
             {
                 assert(!this->_m_is_root());
-                return this->_m_get_parent()->_m_children_array.front() == this;
+                return this->_m_parent()->_m_children_array.front() == this;
             }
 
             constexpr _m_node_ptr_t
-            _m_next_sibling()
-                noexcept
-            {
-                if (this->_m_is_root() || this->_m_is_last())
-                    return nullptr;
-                return *(std::find(this->_m_get_parent()->_m_children_array.begin(),
-                                   this->_m_get_parent()->_m_children_array.end(),
-                                   this) + 1);
-            }
-
-            constexpr _m_node_ptr_t
-            _m_prev_sibling()
-                noexcept
-            {
-                if (this->_m_is_root() || this->_m_is_first())
-                    return nullptr;
-                return *(std::find(this->_m_get_parent()->_m_children_array.begin(),
-                                   this->_m_get_parent()->_m_children_array.end(),
-                                   this) - 1);
-            }
-
-            constexpr _m_cnode_ptr_t
             _m_next_sibling()
                 const noexcept
             {
                 if (this->_m_is_root() || this->_m_is_last())
                     return nullptr;
-                return *(std::find(this->_m_get_parent()->_m_children_array.cbegin(),
-                                   this->_m_get_parent()->_m_children_array.cend(),
+                return *(std::find(this->_m_parent()->_m_children_array.begin(),
+                                   this->_m_parent()->_m_children_array.end(),
                                    this) + 1);
             }
 
-            constexpr _m_cnode_ptr_t
+            constexpr _m_node_ptr_t
             _m_prev_sibling()
                 const noexcept
             {
                 if (this->_m_is_root() || this->_m_is_first())
                     return nullptr;
-                return *(std::find(this->_m_get_parent()->_m_children_array.cbegin(),
-                                   this->_m_get_parent()->_m_children_array.cend(),
+                return *(std::find(this->_m_parent()->_m_children_array.begin(),
+                                   this->_m_parent()->_m_children_array.end(),
                                    this) - 1);
             }
-
         };
 
     }

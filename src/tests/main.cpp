@@ -1,4 +1,3 @@
-
 #include <treelib/binary>
 #include <treelib/rose>
 
@@ -65,7 +64,13 @@ namespace tl
          * @brief constructor/assignment-operator-tests.
          ***************************************************/
 
-        // tree_type my_tree_copy = my_tree;
+        tree_type my_tree_copy(my_tree);
+
+        assert(my_tree_copy == my_tree);
+
+        tree_type my_tree_move = std::move(my_tree_copy);
+
+        assert(my_tree_move == my_tree);
 
         std::println("{} :: constructor/assignment-operator passed", __FUNCTION__);
 
@@ -136,7 +141,13 @@ namespace tl
          * @brief constructor/assignment-operator-tests.
          ***************************************************/
 
-        // tree_type my_tree_copy = my_tree;
+        tree_type my_tree_copy(my_tree);
+
+        assert(my_tree_copy == my_tree);
+
+        tree_type my_tree_move = std::move(my_tree_copy);
+
+        assert(my_tree_move == my_tree);
 
         std::println("{} :: constructor/assignment-operator passed", __FUNCTION__);
 
@@ -220,7 +231,13 @@ namespace tl
          * @brief constructor/assignment-operator-tests.
          ***************************************************/
 
-        // tree_type my_tree_copy = my_tree;
+        tree_type my_tree_copy(my_tree);
+
+        assert(my_tree_copy == my_tree);
+
+        tree_type my_tree_move = std::move(my_tree_copy);
+
+        assert(my_tree_move == my_tree);
 
         std::println("{} :: constructor/assignment-operator passed", __FUNCTION__);
 

@@ -5,7 +5,7 @@
  /***********************************************************************
   * @file   treelib/detail/base/node.hpp
   * @author Julian Benzel
-  * @date   14.09.2026
+  * @date   20.09.2026
   *
   * @brief  mixins/CRTP-mixins for node-types.
   *
@@ -70,7 +70,7 @@ namespace tl
         
         protected:
 
-            _m_value_t _m_value;
+            _m_value_t _m_data;
 
         public:
 
@@ -83,7 +83,7 @@ namespace tl
             constexpr
             _value_node(Args&&... args)
                 noexcept(std::is_nothrow_constructible_v<_m_value_t, Args...>)
-                : _m_value(std::forward<Args>(args)...)
+                : _m_data(std::forward<Args>(args)...)
             { }
 
             /***************************************************
@@ -92,15 +92,15 @@ namespace tl
 
             [[nodiscard]]
             constexpr _m_ref_t
-            _m_get_value()
+            _m_value()
                 noexcept
-            { return this->_m_value; }
+            { return this->_m_data; }
 
             [[nodiscard]]
             constexpr _m_cref_t
-            _m_get_value()
+            _m_value()
                 const noexcept
-            { return this->_m_value; }
+            { return this->_m_data; }
         };
 
 
@@ -123,13 +123,7 @@ namespace tl
 
         protected:
 
-            _m_node_ptr_t _m_parent;
-
-            // unused code
-            // constexpr void
-            // _m_reset()
-            //     noexcept
-            // { this->_m_parent = nullptr; } 
+            _m_node_ptr_t _m_parent_node;
 
             /***************************************************
              * @brief since this is a CRTP-base,
@@ -142,7 +136,7 @@ namespace tl
                 noexcept
             { return static_cast<_m_node_ptr_t>(this); }
 
-            constexpr _m_node_ptr_t
+            constexpr _m_cnode_ptr_t
             _m_node_ptr()
                 const noexcept
             { return static_cast<_m_cnode_ptr_t>(this); }
@@ -160,25 +154,19 @@ namespace tl
             _bidirectional_node()
                 _treelib_noexcept_if(_m_base_t())
                 : _m_base_t()
-                , _m_parent(nullptr)
+                , _m_parent_node(nullptr)
             { }
 
         public:
                 
             /***************************************************
-             * @brief parent accessors.
+             * @brief parent accessor.
              ***************************************************/
 
             constexpr _m_node_ptr_t
-            _m_get_parent() 
-                noexcept
-            { return this->_m_parent; }
-
-
-            constexpr _m_cnode_ptr_t
-            _m_get_parent()
+            _m_parent()
                 const noexcept
-            { return this->_m_parent; }
+            { return this->_m_parent_node; }
 
             /***************************************************
              * @brief forward hooking/unhooking to base-class
@@ -191,7 +179,7 @@ namespace tl
                 _treelib_noexcept_if_member(_m_base_t&, _m_hook_at, _m_hook_t, _m_node_ptr_t)
             {
                 this->_m_base_t::_m_hook_at(_at, _node);
-                _node->_m_parent = this->_m_node_ptr();
+                _node->_m_parent_node = this->_m_node_ptr();
             }
 
             constexpr _m_node_ptr_t
@@ -199,7 +187,7 @@ namespace tl
                 _treelib_noexcept_if_member(_m_base_t&, _m_unhook_at, _m_hook_t)
             {
                 _m_node_ptr_t _res = this->_m_base_t::_m_unhook_at(_at);
-                _res->_m_parent = nullptr;
+                _res->_m_parent_node = nullptr;
                 return _res;
             }
 
@@ -208,7 +196,7 @@ namespace tl
                 _treelib_noexcept_if_member(_m_base_t&, _m_unhook_if, _m_node_ptr_t)
             {
                 this->_m_base_t::unhook_if(_node);
-                _node->_m_parent = nullptr;
+                _node->_m_parent_node = nullptr;
             }
 
             /***************************************************
@@ -218,13 +206,12 @@ namespace tl
              *        since the parent-node can be notified 
              *        of the desired change. 
              ***************************************************/
-
             constexpr void
             _m_unhook()
                 _treelib_noexcept_if_member(_m_base_t&, _m_unhook_if, _m_node_ptr_t)
             {
-                this->_m_parent->_m_base_t::_m_unhook_if(this);
-                this->_m_parent = nullptr;
+                this->_m_parent_node->_m_base_t::_m_unhook_if(this);
+                this->_m_parent_node = nullptr;
             }
 
         };
@@ -251,7 +238,7 @@ namespace tl
 
         protected:
 
-            _m_depth_t _m_depth;
+            _m_depth_t _m_node_depth;
 
             /***************************************************
              * constructor (1).
@@ -266,7 +253,7 @@ namespace tl
             _depth_node()
                 _treelib_noexcept_if(_m_base_t())
                 : _m_base_t()
-                , _m_depth(0)
+                , _m_node_depth(0)
             { }
 
         public:
@@ -278,9 +265,9 @@ namespace tl
              ***************************************************/
             constexpr void
             _m_update_depth(_m_depth_t _depth)
-                noexcept
+                _treelib_noexcept_if_member(_m_base_t&, _m_children)
             {
-                this->_m_depth = _depth;
+                this->_m_node_depth = _depth;
                 for (_m_node_ptr_t _child
                      : this->_m_base_t::_m_children())
                      _child->_m_update_depth(_depth + 1);
@@ -289,23 +276,21 @@ namespace tl
             /***************************************************
              * @brief depth accessor.
              ***************************************************/
-
             constexpr _m_depth_t
-            _m_get_depth()
+            _m_depth()
                 const noexcept
-            { return this->_m_depth; }
+            { return this->_m_node_depth; }
 
             /***************************************************
              * @brief recursively update the depth-values when
              *        hooking another node.
              ***************************************************/
-
             constexpr void
             _m_hook_at(_m_hook_t _at, _m_node_ptr_t _node)
                 _treelib_noexcept_if_member(_m_base_t, _m_hook_at)
             {
                 this->_m_base_t::_m_hook_at(_at, _node);
-                _node->_m_update_depth(this->_m_depth + 1);
+                _node->_m_update_depth(this->_m_node_depth + 1);
             }
         };
     }

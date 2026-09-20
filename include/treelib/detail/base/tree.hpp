@@ -153,18 +153,18 @@ namespace tl
             using _m_alloc_traits_t = std::allocator_traits<_m_alloc_t>;
             using _m_size_t         = typename _m_alloc_traits_t::size_type;
 
-            _m_size_t _m_size;
+            _m_size_t _m_node_count;
 
             constexpr
             _size_base()
-                : _m_size(0)
+                : _m_node_count(0)
             { }
 
             constexpr
             void _m_reset()
                 noexcept
             {
-                this->_m_size = 0;
+                this->_m_node_count = 0;
             }
 
             /***************************************************
@@ -175,15 +175,15 @@ namespace tl
             void _m_inc_size(_m_size_t _n = 1)
                 noexcept
             {
-                this->_m_size += _n;
+                this->_m_node_count += _n;
             }
 
             constexpr
             void _m_dec_size(_m_size_t _n = 1)
                 noexcept
             {
-                assert(this->_m_size >= _n);
-                this->_m_size -= _n;
+                assert(this->_m_node_count >= _n);
+                this->_m_node_count -= _n;
             }
 
         public:
@@ -197,7 +197,7 @@ namespace tl
             constexpr size_type
             size() 
                 const noexcept
-            { return this->_m_size; }
+            { return this->_m_node_count; }
 
             /***************************************************
              * @brief checks whether the container is empty.
@@ -206,7 +206,7 @@ namespace tl
             constexpr bool
             empty() 
                 const noexcept
-            { return this->_m_size == 0; }
+            { return this->_m_node_count == 0; }
         };
 
 
@@ -271,7 +271,7 @@ namespace tl
                             _m_node_ptr_t _where, 
                             _m_cnode_ptr_t _src)
             {
-                _m_node_ptr_t _new_node = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(_src)->_m_get_value());
+                _m_node_ptr_t _new_node = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(_src)->_m_value());
                 _m_node_traits_t::_s_hook_at(_where, _at, _new_node);
                 this->_m_inc_size();
             }
@@ -289,18 +289,21 @@ namespace tl
              *        copied structure.
              ***************************************************/
             constexpr void
-            _m_copy_children(_m_node_ptr_t& _dest, _m_cnode_ptr_t _src)
+            _m_copy_children(_m_node_ptr_t _dest, _m_cnode_ptr_t _src)
                 requires _copyable_node<_m_node_t>
             {
-                _m_node_traits_t::_s_mimic(_dest, _src,
-                    // capture this-pointer to insert into this tree
-                    [&](auto... _args) { this->_m_emplace_copy(std::forward(_args)...); });
+                // capture this-pointer to insert into this tree
+                auto _insert_fn = [&](_m_hook_t _at,
+                                      _m_node_ptr_t _where, 
+                                      _m_cnode_ptr_t _src) 
+                                  { this->_m_emplace_copy(_at, _where, _src); };
+                _m_node_traits_t::_s_mimic(_dest, _src, _insert_fn);
             }
 
             static constexpr bool 
             _s_compare(_m_cvnode_ptr_t _a, _m_cvnode_ptr_t _b)
                 requires std::equality_comparable<_m_value_t>
-            { return _a->_m_get_value() != _b->_m_get_value(); }
+            { return _a->_m_value() == _b->_m_value(); }
 
             /***************************************************
              * @brief recursively compares all values of 
@@ -428,6 +431,51 @@ namespace tl
                 : _root_base(alloc)
             {
                 this->emplace_root(value);
+            }
+
+            /***************************************************
+             * @brief copy-constructor and assignment-operator.
+             ***************************************************/
+            constexpr
+            _root_base(const _root_base& other)
+                : _root_base(other.get_allocator())
+            { 
+                if (other.empty())
+                    return;
+                this->emplace_root(static_cast<_m_cvnode_ptr_t>(other._m_root)->_m_value());
+                this->_m_copy_children(this->_m_root, other._m_root);
+            }
+
+            constexpr _root_base&
+            operator=(const _root_base& other)
+            {
+                this->clear(); 
+                if (other.empty())
+                    return *this;
+                this->emplace_root(static_cast<_m_cvnode_ptr_t>(other._m_root)->_m_value());
+                this->_m_copy_children(this->_m_root, other._m_root);
+                return *this;
+            }
+
+            /***************************************************
+             * @brief move-constructor and assignment-operator.
+             ***************************************************/
+            constexpr
+            _root_base(_root_base&& other)
+                : _root_base(other.get_allocator())
+            { 
+                // refactor to somehow automatically swap stuff
+                std::swap(this->_m_root, other._m_root);
+                std::swap(this->_m_node_count, other._m_node_count);
+            }
+
+            constexpr _root_base&
+            operator=(_root_base&& other)
+            {
+                this->clear();
+                std::swap(this->_m_root, other._m_root);
+                std::swap(this->_m_node_count, other._m_node_count);
+                return *this;
             }
 
             /***************************************************
@@ -560,6 +608,51 @@ namespace tl
             { }
 
             /***************************************************
+             * @brief copy-constructor and assignment-operator.
+             ***************************************************/
+            constexpr
+            _header_base(const _header_base& other)
+                : _header_base(other.get_allocator())
+            { 
+                if (other.empty())
+                    return;
+                this->_m_copy_children(this->_m_root_node(), 
+                                       other._m_root_node());
+            }
+
+            constexpr _header_base&
+            operator=(const _header_base& other)
+            {
+                this->clear(); 
+                if (other.empty())
+                    return *this;
+                this->_m_copy_children(this->_m_root_node(), 
+                                       other._m_root_node());
+                return *this;
+            }
+
+            /***************************************************
+             * @brief move-constructor and assignment-operator.
+             ***************************************************/
+            constexpr
+            _header_base(_header_base&& other)
+                : _header_base(other.get_allocator())
+            { 
+                // refactor to somehow automatically swap stuff
+                std::swap(this->_m_header, other._m_header);
+                std::swap(this->_m_node_count, other._m_node_count);
+            }
+
+            constexpr _header_base&
+            operator=(_header_base&& other)
+            {
+                this->clear();
+                std::swap(this->_m_header, other._m_header);
+                std::swap(this->_m_node_count, other._m_node_count);
+                return *this;
+            }
+
+            /***************************************************
              * @brief clears the contents.
              ***************************************************/
             constexpr void 
@@ -567,7 +660,7 @@ namespace tl
                 noexcept
             {
                 for (_m_node_ptr_t _child 
-                     : _m_node_traits_t::_s_children(std::addressof(this->_m_header)))
+                     : _m_node_traits_t::_s_children(this->_m_root_node()))
                     this->_m_erase_children(_child);
                 this->_m_reset();
             }
@@ -657,44 +750,6 @@ namespace tl
              ***************************************************/
 
             using _m_base_t::_m_base_t;
-
-            /***************************************************
-             * @brief copy-constructor and assignment-operator.
-             ***************************************************/
-            constexpr
-            _outward_tree_mixin(const _outward_tree_mixin& other)
-                : _outward_tree_mixin(other.get_allocator())
-            { 
-                if (other.empty())
-                    return;
-                this->_m_copy_nodes(&this->_m_root, other._m_root);
-            }
-
-            constexpr _outward_tree_mixin&
-            operator=(const _outward_tree_mixin& other)
-            {
-                if (!this->empty())
-                { this->clear(); }
-                if (other.empty())
-                    return *this;
-                this->_m_copy_nodes(&this->_m_root, other._m_root);
-                return *this;
-            }
-
-            /***************************************************
-             * @brief move-constructor and assignment-operator.
-             ***************************************************/
-            constexpr
-            _outward_tree_mixin(_outward_tree_mixin&& other)
-            { 
-                std::swap(*this, other);
-            }
-
-            constexpr _outward_tree_mixin&
-            operator=(_outward_tree_mixin&& other)
-            {
-                return *this;
-            }
 
             /***************************************************
              * @brief destructor.

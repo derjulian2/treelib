@@ -43,8 +43,6 @@
  *          
  *          this property is something that seperates nodes like these from 
  *          others regarding it's capabilities.
- *
- * @todo    noexcept-specifiers.
  *******************************************************************************************/
 
 #include <treelib/detail/bits/except.hpp>
@@ -58,48 +56,6 @@ namespace tl
 {
     namespace _detail
     {
-        /*************************************************************
-         * @brief ranges-convenience methods for
-         *        accessing first/last element.
-         *
-         *        std::ranges::begin and
-         *        std::ranges::end don't work on
-         *        object-types (e.g. filter_view),
-         *        these methods bind the view to
-         *        an lvalue and return the first
-         *        element either way.
-         *
-         *        i am not sure if there is a
-         *        reason against doing this, i think
-         *        there is a reason the std works
-         *        this way (with filter_view's .begin()
-         *        mutating state and ranges::begin requirements).
-         *        i have some .children() methods returning
-         *        filter_view-objects, so this workaround does what i
-         *        want for now.
-         *************************************************************/
-
-        template <std::ranges::range R>
-        constexpr decltype(auto)
-        _s_range_front(R&& r)
-        {
-            assert(!std::ranges::empty(r)); 
-            return *std::ranges::begin(r); 
-        }
-
-        template <std::ranges::range R>
-        constexpr decltype(auto)
-        _s_range_back(R&& r)
-        { 
-            assert(!std::ranges::empty(r));
-            return *std::prev(std::ranges::end(r)); 
-        }
-
-        template <std::ranges::range R>
-        constexpr std::size_t
-        _s_range_size(R&& r)
-        { return std::ranges::size(r); }
-
         /*****************************************
          * @brief requirements of a node-type to
          *        be used in a tree-container.
@@ -144,7 +100,7 @@ namespace tl
                 { t->_m_children() }
                     -> std::ranges::range;
                 { ct->_m_children() }
-                    -> std::ranges::input_range;
+                    -> std::ranges::range;
             };
 
 
@@ -199,10 +155,10 @@ namespace tl
                 /***************************************************
                  * @brief parent accessors.
                  ***************************************************/
-                { t->_m_get_parent() }
+                { t->_m_parent() }
                     -> std::convertible_to<T*>;
-                { ct->_m_get_parent() }
-                    -> std::convertible_to<const T*>;
+                { ct->_m_parent() }
+                    -> std::convertible_to<T*>;
                 
                 /***************************************************
                  * @brief sibling accessors.
@@ -210,11 +166,11 @@ namespace tl
                 { t->_m_next_sibling() }
                     -> std::convertible_to<T*>;
                 { ct->_m_next_sibling() }
-                    -> std::convertible_to<const T*>;
+                    -> std::convertible_to<T*>;
                 { t->_m_prev_sibling() }
                     -> std::convertible_to<T*>;
                 { ct->_m_prev_sibling() }
-                    -> std::convertible_to<const T*>;
+                    -> std::convertible_to<T*>;
 
                 /***************************************************
                  * @brief unhooking the target-node itself,
@@ -237,6 +193,7 @@ namespace tl
          *        interface for tree-node-types.
          ***************************************************/
         template <typename NodeT>
+            requires _node<NodeT>
         struct _node_traits
         {
             using _m_node_t = NodeT;
@@ -261,38 +218,54 @@ namespace tl
 
             static constexpr bool 
             _s_is_leaf(_m_cptr_t _node)
-            // maybe fallback to std::ranges::empty(children)
+                _treelib_noexcept_if_member(_m_cref_t, _m_is_leaf)
+                requires _treelib_has_member(_m_cref_t, _m_is_leaf)
+            // forward call to member-function if present
             { return _node->_m_is_leaf(); }
 
             static constexpr bool
+            _s_is_leaf(_m_cptr_t _node)
+                _treelib_noexcept_if_member(_m_cref_t, _m_children)
+            // SFINAE fallback
+            { return std::ranges::empty(_node->_m_children()); }
+
+            static constexpr bool
             _s_is_root(_m_cptr_t _node)
+                _treelib_noexcept_if_member(_m_cref_t, _m_parent)
                 requires _parent_node<_m_node_t>
-            { return _s_parent(_node) == nullptr; }
+            { return _node->_m_parent() == nullptr; }
+
+            static constexpr std::size_t
+            _s_child_count(_m_cptr_t _node)
+                _treelib_noexcept_if_member(_m_cref_t, _m_child_count)
+                requires _treelib_has_member(_m_cref_t, _m_child_count)
+            // forward call to member-function if present
+            { return _node->_m_child_count(); }
+
+            static constexpr std::size_t
+            _s_child_count(_m_cptr_t _node)
+                _treelib_noexcept_if_member(_m_cref_t, _m_children)
+            // SFINAE fallback
+            { 
+                auto _children = _node->_m_children();
+                return std::ranges::distance(std::ranges::cbegin(_children),
+                                             std::ranges::cend(_children)); 
+            }
 
             static constexpr _m_depth_t
             _s_depth(_m_cptr_t _node)
         #ifdef _treelib_store_depth
-                _treelib_noexcept_if_member(_m_node_t, _m_get_depth)
-            { return _node->_m_get_depth() }
+                _treelib_noexcept_if_member(_m_cref_t, _m_depth)
+            { return _node->_m_depth() }
         #else
-                _treelib_noexcept_if_member(const _m_node_t&, _m_get_parent)
+                _treelib_noexcept_if_member(_m_cref_t, _m_parent)
             {
                 _m_depth_t _res { 0 };
-                while ((_node = _node->_m_get_parent()))
+                while ((_node = _node->_m_parent()))
                     ++_res;
                 return _res;
             }
         #endif
-
-            static constexpr std::size_t
-            _s_child_count(_m_cptr_t _node)
-                noexcept
-            { return _s_range_size(_node->_m_children()); }
-
-            static constexpr bool
-            _s_has_children(_m_cptr_t _node)
-                noexcept
-            { return !std::ranges::empty(_node->_m_children()); }
 
             /***************************************************
              * @brief hook-functionality.
@@ -300,14 +273,17 @@ namespace tl
 
             static constexpr void
             _s_hook_at(_m_ptr_t _parent, _m_hook_t _at, _m_ptr_t _node)
+                _treelib_noexcept_if_member(_m_ref_t, _m_hook_at, _m_hook_t, _m_ptr_t)
             { _parent->_m_hook_at(_at, _node); }
 
             static constexpr _m_ptr_t
             _s_unhook_at(_m_ptr_t _parent, _m_hook_t _at)
+                _treelib_noexcept_if_member(_m_ref_t, _m_unhook_at, _m_hook_t)
             { return _parent->_m_unhook_at(_at); }
 
             static constexpr void
             _s_unhook_if(_m_ptr_t _parent, _m_ptr_t _node)
+                _treelib_noexcept_if_member(_m_ref_t, _m_unhook_if, _m_ptr_t)
             { _parent->_m_unhook_if(_node); }
 
             /***************************************************
@@ -315,27 +291,23 @@ namespace tl
              ***************************************************/
 
             static constexpr decltype(auto)
-            _s_children(_m_ptr_t _node)
-            { return _node->_m_children(); }
-
-            static constexpr decltype(auto)
             _s_children(_m_cptr_t _node)
+                _treelib_noexcept_if_member(_m_cref_t, _m_children)
             { return _node->_m_children(); }
 
             static constexpr _m_ptr_t
-            _s_parent(_m_ptr_t _node)
-            { return _node->_m_get_parent(); }
-
-            static constexpr _m_cptr_t
             _s_parent(_m_cptr_t _node)
-            { return _node->_m_get_parent(); }
+                _treelib_noexcept_if_member(_m_cref_t, _m_parent)
+                requires _parent_node<_m_node_t>
+            { return _node->_m_parent(); }
 
             static constexpr _m_ptr_t
             _s_first_child(_m_cptr_t _node)
             {
                 if (_s_is_leaf(_node))
                     return nullptr;
-                return _s_range_front(_s_children(_node));
+                auto _children = _s_children(_node);
+                return *std::ranges::begin(_children);
             }
 
             static constexpr _m_ptr_t
@@ -343,14 +315,18 @@ namespace tl
             {
                 if (_s_is_leaf(_node))
                     return nullptr;
-                return _s_range_back(_s_children(_node));
+                auto _children = _s_children(_node);
+                return *(std::prev(std::ranges::end(_children)));
             }
 
             static constexpr _m_cptr_t
             _s_seek_leftmost(_m_cptr_t _node)
             {
                 while (!_s_is_leaf(_node))
-                    _node = _s_range_front(_s_children(_node));
+                {
+                    auto _children = _s_children(_node);
+                    _node = *std::ranges::begin(_children);
+                }
                 return _node;
             }
 
@@ -358,16 +334,21 @@ namespace tl
             _s_seek_rightmost(_m_cptr_t _node)
             {
                 while (!_s_is_leaf(_node))
-                    _node = _s_range_back(_s_children(_node));
+                {
+                    auto _children = _s_children(_node);
+                    _node = *std::prev(std::ranges::end(_children));
+                }
                 return _node;
             }
-
 
             static constexpr _m_ptr_t
             _s_seek_leftmost(_m_ptr_t _node)
             {
                 while (!_s_is_leaf(_node))
-                    _node = _s_range_front(_s_children(_node));
+                {
+                    auto _children = _s_children(_node);
+                    _node = *std::ranges::begin(_children);
+                }
                 return _node;
             }
 
@@ -375,7 +356,10 @@ namespace tl
             _s_seek_rightmost(_m_ptr_t _node)
             {
                 while (!_s_is_leaf(_node))
-                    _node = _s_range_back(_s_children(_node));
+                {
+                    auto _children = _s_children(_node);
+                    _node = *std::prev(std::ranges::end(_children));
+                }
                 return _node;
             }
 
@@ -388,32 +372,68 @@ namespace tl
             { return _s_first_child(_parent) == _node; }
 
             static constexpr bool
+            _s_is_first_child(_m_cptr_t _node)
+                requires _parent_node<_m_node_t>
+            { 
+                assert(!_s_is_root(_node));
+                return _s_is_first_child_of(_s_parent(_node), _node);
+            }
+
+            static constexpr bool
             _s_is_last_child_of(_m_cptr_t _parent, _m_cptr_t _node)
             { return _s_last_child(_parent) == _node; }
+
+            static constexpr bool
+            _s_is_last_child(_m_cptr_t _node)
+                requires _parent_node<_m_node_t>
+            { 
+                assert(!_s_is_root(_node));
+                return _s_is_last_child_of(_s_parent(_node), _node);
+            }
 
             /***************************************************
              * @brief sibling accessors.
              ***************************************************/
 
             static constexpr _m_ptr_t
-            _s_next_sibling(_m_ptr_t _node)
-                requires _parent_node<_m_node_t>
-            { return _node->_m_next_sibling(); }
-
-            static constexpr _m_cptr_t
             _s_next_sibling(_m_cptr_t _node)
-                requires _parent_node<_m_node_t>
+                _treelib_noexcept_if_member(_m_cref_t, _m_next_sibling)
+                requires (_parent_node<_m_node_t> && _treelib_has_member(_m_cref_t, _m_next_sibling))
+            // forward call to member-function if present
             { return _node->_m_next_sibling(); }
 
             static constexpr _m_ptr_t
-            _s_prev_sibling(_m_ptr_t _node)
+            _s_next_sibling(_m_cptr_t _node)
                 requires _parent_node<_m_node_t>
+            // SFINAE fallback
+            {
+                if (_s_is_root(_node) || _s_is_last_child(_node))
+                    return nullptr;
+                auto _children = _s_children(_s_parent(_node));
+                return *(std::find(std::ranges::cbegin(_children),
+                                   std::ranges::cend(_children),
+                                   _node) + 1);
+            }
+
+            static constexpr _m_ptr_t
+            _s_prev_sibling(_m_cptr_t _node)
+                _treelib_noexcept_if_member(_m_cref_t, _m_prev_sibling)
+                requires (_parent_node<_m_node_t> && _treelib_has_member(_m_cref_t, _m_prev_sibling))
+            // forward call to member-function if present
             { return _node->_m_prev_sibling(); }
 
-            static constexpr _m_cptr_t
+            static constexpr _m_ptr_t
             _s_prev_sibling(_m_cptr_t _node)
                 requires _parent_node<_m_node_t>
-            { return _node->_m_prev_sibling(); }
+            // SFINAE fallback
+            {
+                if (_s_is_root(_node) || _s_is_first_child(_node))
+                    return nullptr;
+                auto _children = _s_children(_s_parent(_node));
+                return *(std::find(std::ranges::cbegin(_children),
+                                   std::ranges::cend(_children),
+                                   _node) - 1);
+            }
 
             /***************************************************
              * @brief structural-copy.
@@ -421,7 +441,7 @@ namespace tl
 
             template <typename Fn>
                 requires std::invocable<Fn, _m_hook_t, _m_ptr_t, _m_cptr_t>
-            constexpr void
+            static constexpr void
             _s_mimic(_m_ptr_t _node, _m_cptr_t _src, Fn&& _insert_fn)
                 requires _copyable_node<_m_node_t>
             { _node->_m_mimic(_src, std::forward<Fn>(_insert_fn)); }
@@ -448,10 +468,12 @@ namespace tl
 
             static constexpr _m_iter_t
             _s_root_begin(_m_node_ptr_t _node)
+                _treelib_noexcept_if(_m_iter_t::_s_root_begin(std::declval<_m_node_ptr_t>()))
             { return _m_iter_t::_s_root_begin(_node); }
 
             static constexpr _m_iter_t
             _s_header_begin(_m_node_ptr_t _node)
+                _treelib_noexcept_if(_m_iter_t::_s_header_begin(std::declval<_m_node_ptr_t>()))
             { return _m_iter_t::_s_header_begin(_node); }
 
             static constexpr _m_iter_t
@@ -462,11 +484,7 @@ namespace tl
             static constexpr _m_node_ptr_t 
             _s_to_node(const _m_iter_t& _iter)
                 noexcept
-            { 
-                static_assert(_treelib_is_member_noexcept(_m_iter_t, _m_cur),
-                    "current-node accessor should not throw");
-                return _iter._m_cur(); 
-            }
+            { return _iter._m_cur(); }
         };
     }
 }

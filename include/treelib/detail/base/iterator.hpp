@@ -132,7 +132,7 @@ namespace tl
                 _m_node_ptr_t _node = _iter_traits<IterT>::_s_to_node(_iter);
                 if constexpr (Reversed)
                 {
-                    if (_m_node_traits_t::_s_has_children(_node))
+                    if (!_m_node_traits_t::_s_is_leaf(_node))
                         return _m_node_traits_t::_s_last_child(_node);
                     while (!(_node = _m_node_traits_t::_s_prev_sibling(_node)))   
                     {
@@ -144,7 +144,7 @@ namespace tl
                 }
                 else
                 {
-                    if (_m_node_traits_t::_s_has_children(_node))
+                    if (!_m_node_traits_t::_s_is_leaf(_node))
                         return _m_node_traits_t::_s_first_child(_node);
                     while (!(_node = _m_node_traits_t::_s_next_sibling(_node)))   
                     {
@@ -266,7 +266,15 @@ namespace tl
                 _m_node_ptr_t _next;
                 if constexpr (Reversed)
                 {
-                    
+                    if (!_m_node_traits_t::_s_is_leaf(_node) && !_iter._m_skip_children)
+                        return _m_node_traits_t::_s_seek_rightmost(_node);
+                    if ((_next = _m_node_traits_t::_s_prev_sibling(_node)))
+                    {
+                        _iter._m_skip_children = false; 
+                        return _next; 
+                    }
+                    _iter._m_skip_children = true;
+                    return _m_node_traits_t::_s_parent(_node);
                 }
                 else
                 {
@@ -636,7 +644,7 @@ namespace tl
             #else
                 if (this->_m_cur() == nullptr)
                     throw std::out_of_range("cannot dereference end-iterator");
-                return static_cast<_m_vnode_ptr_t>(this->_m_cur())->_m_get_value();
+                return static_cast<_m_vnode_ptr_t>(this->_m_cur())->_m_value();
             #endif
             }
 
@@ -957,8 +965,8 @@ namespace tl
 
 
         /***************************************************
-         * @brief iterator that traverses a tree iteratively,
-         *        (without forming a queue) (within limits). 
+         * @brief iterator that traverses a tree iteratively, 
+         *        (no breadth-first). 
          ***************************************************/
         template <bool IsConst,
                   typename ValueT,
@@ -1004,23 +1012,6 @@ namespace tl
 
             using _m_base_t::_m_base_t;
         };
-           
-
-        // template <typename NodeT>
-        // using _depth_first_pre_order_iterator 
-        //     = _traversing_iterator<_depth_first_pre_order<NodeT>>;
-
-        // template <typename NodeT>
-        // using _depth_first_pre_order_queued_iterator 
-        //     = _queued_iterator<_depth_first_pre_order<NodeT>>;
-
-        // template <typename NodeT>
-        // using _breadth_first_in_order_iterator 
-        //     = _traversing_iterator<_breadth_first_in_order<NodeT>>;
-
-        // template <typename NodeT>
-        // using _breadth_first_in_order_queued_iterator 
-        //     = _queued_iterator<_breadth_first_in_order<NodeT>>;
     }
 
     /***************************************************

@@ -9,6 +9,11 @@
  *
  * @brief  named exception-types to be used
  *         in tree-related contexts.
+ *
+ *         use #define _treelib_no_exception_specs to
+ *         disable any macroed exception-specification,
+ *         just in the case that they're too verbose
+ *         or redundant to the compiler (idk).
  ***************************************************/
 
 #include <stdexcept>
@@ -57,14 +62,23 @@
 #define _treelib_declval_list(...) \
     _treelib_for_each(_treelib_declval, _treelib_comma, __VA_ARGS__)
 
-#define _treelib_is_member_noexcept(_typename, _membername, ...) \
-    noexcept(std::declval<_typename>()._membername(_treelib_declval_list(__VA_ARGS__)))
+#ifndef _treelib_no_exception_specs
+    #define _treelib_is_member_noexcept(_typename, _membername, ...) \
+        noexcept(std::declval<_typename>()._membername(_treelib_declval_list(__VA_ARGS__)))
 
-#define _treelib_noexcept_if(_expr) \
-noexcept(noexcept(_expr))
+    #define _treelib_noexcept_if(_expr) \
+    noexcept(noexcept(_expr))
 
-#define _treelib_noexcept_if_member(_typename, _methodname, ...) \
-noexcept(_treelib_is_member_noexcept(_typename, _methodname, __VA_ARGS__))
+    #define _treelib_noexcept_if_member(_typename, _methodname, ...) \
+    noexcept(_treelib_is_member_noexcept(_typename, _methodname, __VA_ARGS__))
+#else
+    #define _treelib_is_member_noexcept(...)
+    #define _treelib_noexcept_if(...)
+    #define _treelib_noexcept_if_member(...)
+#endif
+
+#define _treelib_has_member(_typename, _methodname, ...) \
+(requires (_typename t) { t._methodname(_treelib_declval_list(__VA_ARGS__)); })
 
 namespace tl
 {
