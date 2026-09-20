@@ -60,6 +60,11 @@ namespace tl
                 : _m_child_vec()
             { }
             
+            constexpr bool
+            _m_is_leaf()
+                const noexcept
+            { return this->_m_child_vec.empty(); }
+
             constexpr void
             _m_hook_at(_m_hook_t _at, _m_node_ptr_t _node)
             {
@@ -168,6 +173,11 @@ namespace tl
                 , _m_last(nullptr)
             { }
             
+            constexpr bool
+            _m_is_leaf()
+                const noexcept
+            { return this->_m_first == nullptr; }
+
             constexpr void
             _m_hook_at(_m_hook_t at, _m_node_ptr_t node)
             {

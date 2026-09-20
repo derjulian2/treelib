@@ -259,15 +259,15 @@ namespace tl
              * @brief information.
              ***************************************************/
 
-            static constexpr bool _s_is_leaf(_m_cptr_t _node)
-                _treelib_noexcept_if_member(const _m_node_t&, _m_children)
-            { return std::ranges::empty(_node->_m_children()); }
+            static constexpr bool 
+            _s_is_leaf(_m_cptr_t _node)
+            // maybe fallback to std::ranges::empty(children)
+            { return _node->_m_is_leaf(); }
 
             static constexpr bool
             _s_is_root(_m_cptr_t _node)
-                _treelib_noexcept_if_member(const _m_node_t&, _m_get_parent)
                 requires _parent_node<_m_node_t>
-            { return _node->_m_get_parent() == nullptr; }
+            { return _s_parent(_node) == nullptr; }
 
             static constexpr _m_depth_t
             _s_depth(_m_cptr_t _node)
@@ -288,6 +288,11 @@ namespace tl
             _s_child_count(_m_cptr_t _node)
                 noexcept
             { return _s_range_size(_node->_m_children()); }
+
+            static constexpr bool
+            _s_has_children(_m_cptr_t _node)
+                noexcept
+            { return !std::ranges::empty(_node->_m_children()); }
 
             /***************************************************
              * @brief hook-functionality.
@@ -318,14 +323,14 @@ namespace tl
             { return _node->_m_children(); }
 
             static constexpr _m_ptr_t
-            _s_first_child(_m_ptr_t _node)
-            {
-                if (_s_is_leaf(_node))
-                    return nullptr;
-                return _s_range_front(_s_children(_node));
-            }
+            _s_parent(_m_ptr_t _node)
+            { return _node->_m_get_parent(); }
 
             static constexpr _m_cptr_t
+            _s_parent(_m_cptr_t _node)
+            { return _node->_m_get_parent(); }
+
+            static constexpr _m_ptr_t
             _s_first_child(_m_cptr_t _node)
             {
                 if (_s_is_leaf(_node))
@@ -334,7 +339,7 @@ namespace tl
             }
 
             static constexpr _m_ptr_t
-            _s_last_child(_m_ptr_t _node)
+            _s_last_child(_m_cptr_t _node)
             {
                 if (_s_is_leaf(_node))
                     return nullptr;
@@ -342,11 +347,36 @@ namespace tl
             }
 
             static constexpr _m_cptr_t
-            _s_last_child(_m_cptr_t _node)
+            _s_seek_leftmost(_m_cptr_t _node)
             {
-                if (_s_is_leaf(_node))
-                    return nullptr;
-                return _s_range_back(_s_children(_node));
+                while (!_s_is_leaf(_node))
+                    _node = _s_range_front(_s_children(_node));
+                return _node;
+            }
+
+            static constexpr _m_cptr_t
+            _s_seek_rightmost(_m_cptr_t _node)
+            {
+                while (!_s_is_leaf(_node))
+                    _node = _s_range_back(_s_children(_node));
+                return _node;
+            }
+
+
+            static constexpr _m_ptr_t
+            _s_seek_leftmost(_m_ptr_t _node)
+            {
+                while (!_s_is_leaf(_node))
+                    _node = _s_range_front(_s_children(_node));
+                return _node;
+            }
+
+            static constexpr _m_ptr_t
+            _s_seek_rightmost(_m_ptr_t _node)
+            {
+                while (!_s_is_leaf(_node))
+                    _node = _s_range_back(_s_children(_node));
+                return _node;
             }
 
             /***************************************************

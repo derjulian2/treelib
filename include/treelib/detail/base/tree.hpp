@@ -56,6 +56,10 @@ namespace tl
             _m_node_alloc_t _m_node_alloc;
 
             /***************************************************
+             * creation/destruction of nodes.
+             ***************************************************/
+
+            /***************************************************
              * @brief allocates and constructs a fresh node-
              *        instance containing an instance of
              *        value_type, constructed from args.
@@ -156,21 +160,16 @@ namespace tl
                 : _m_size(0)
             { }
 
-            /***************************************************
-             * @brief swap specialization.
-             ***************************************************/
-            friend constexpr void
-            swap(_size_base& a, _size_base& b)
-            {
-                std::swap(a._m_size, b._m_size);
-            }
-
             constexpr
             void _m_reset()
                 noexcept
             {
                 this->_m_size = 0;
             }
+
+            /***************************************************
+             * size modifiers.
+             ***************************************************/
 
             constexpr
             void _m_inc_size(_m_size_t _n = 1)
@@ -212,8 +211,8 @@ namespace tl
 
 
         /***************************************************
-         * @brief supplies basic recursive deletion
-         *        and copying methods for all tree-types.
+         * @brief supplies basic copying/erasure/comparing
+         *        methods that recursively operate on nodes.
          ***************************************************/
         template <typename NodeT,
                   typename AllocT>
@@ -238,6 +237,18 @@ namespace tl
 
             using _m_hook_t = typename _m_node_traits_t::_m_hook_t;
 
+            /***************************************************
+             * recursive node-operations.
+             ***************************************************/
+
+            /***************************************************
+             * @brief recursively erases all child-nodes
+             *        of the passed node. 
+             * @note  _node itself is not erased and can 
+             *        therefore be a valueless header-node.
+             *        all children must be static_cast-able to
+             *        _m_vnode_ptr_t.
+             ***************************************************/
             constexpr
             void _m_erase_children(_m_node_ptr_t _node)
                 noexcept
@@ -250,27 +261,55 @@ namespace tl
                 this->_m_dec_size();
             }
 
+            /***************************************************
+             * @brief helper function to construct and hook
+             *        a new node from the value of an existing
+             *        node. used in _m_copy_children.
+             ***************************************************/
             constexpr void 
-            _m_insert_from_copy(_m_hook_t _at,
-                                _m_node_ptr_t _where, 
-                                _m_cnode_ptr_t _src)
+            _m_emplace_copy(_m_hook_t _at,
+                            _m_node_ptr_t _where, 
+                            _m_cnode_ptr_t _src)
             {
                 _m_node_ptr_t _new_node = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(_src)->_m_get_value());
                 _m_node_traits_t::_s_hook_at(_where, _at, _new_node);
                 this->_m_inc_size();
             }
 
-            constexpr void // probably refactor.
-            _m_copy_nodes(_m_node_ptr_t* dest, _m_cnode_ptr_t src)
+            /***************************************************
+             * @brief recursively copies all child-nodes
+             *        of the passed node and mimics the structure
+             *        of the source-node.
+             * @note  _dest itself is not copied and can 
+             *        therefore be a valueless header-node.
+             *        all children must be static_cast-able to
+             *        _m_vnode_ptr_t. the destination-node will
+             *        have to satisfy _copyable_node because it
+             *        needs to provide .mimic() to build the
+             *        copied structure.
+             ***************************************************/
+            constexpr void
+            _m_copy_children(_m_node_ptr_t& _dest, _m_cnode_ptr_t _src)
+                requires _copyable_node<_m_node_t>
             {
-                *dest = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(src)->value());
-                _m_node_traits_t::_s_mimic((*dest), src, [&](auto... args) { this->_m_insert_from_copy(std::forward(args)...); });
+                _m_node_traits_t::_s_mimic(_dest, _src,
+                    // capture this-pointer to insert into this tree
+                    [&](auto... _args) { this->_m_emplace_copy(std::forward(_args)...); });
             }
 
             static constexpr bool 
             _s_compare(_m_cvnode_ptr_t _a, _m_cvnode_ptr_t _b)
+                requires std::equality_comparable<_m_value_t>
             { return _a->_m_get_value() != _b->_m_get_value(); }
 
+            /***************************************************
+             * @brief recursively compares all values of 
+             *        the child-nodes of the passed nodes.
+             * @note  _a and _b themselves are not compared and can 
+             *        therefore be valueless header-nodes.
+             *        all children must be static_cast-able to
+             *        _m_vnode_ptr_t.
+             ***************************************************/
             static constexpr bool 
             _s_compare_children(_m_cnode_ptr_t _a, _m_cnode_ptr_t _b)
             {
@@ -311,9 +350,8 @@ namespace tl
          *        this is convenient for e.g. binary trees, in
          *        which a construct with a header-node
          *        is kind of uncomfortable to handle, because
-         *        the header-node would either require
-         *        special-case handling, or your tree would
-         *        always be the left/right subtree of that.
+         *        the header-node would make any tree the
+         *        left/right subtree of that node.
          ***************************************************/
         template <typename NodeT,
                   typename AllocT>
@@ -458,8 +496,8 @@ namespace tl
          * @brief base-class for trees which should
          *        originate from a valueless-header-node.
          *
-         *        this is convenient for e.g. rose-trees, in which
-         *        a construct without a header-node could
+         *        this is convenient for e.g. rose-trees, in 
+         *        which a construct without a header-node could
          *        lead to an invalid tree-state/node-leaks.
          *
          *        for example, if you would insert a
@@ -844,8 +882,23 @@ namespace tl
 
         public:
 
+            using _m_base_t::_m_base_t;
+
             template <traversal Trav>
-            using traversing_iterator = _traversing_iterator<_m_value_t, _m_to_trav_t<Trav>>;
+            using traversing_iterator = _traversing_iterator<false, _m_value_t, _m_to_trav_t<Trav>>;
+            template <traversal Trav>
+            using const_traversing_iterator = _traversing_iterator<true, _m_value_t, _m_to_trav_t<Trav>>;
+
+            using _m_base_t::default_traversal;
+
+            using typename _m_base_t::hook_type;
+
+            using iterator = traversing_iterator<default_traversal>;
+            using const_iterator = traversing_iterator<default_traversal>;
+            
+            /***************************************************
+             * additional iterators.
+             ***************************************************/
 
             /***************************************************
              * @returns a traversing iterator to the beginning, 
@@ -855,15 +908,94 @@ namespace tl
             template <traversal Trav>
             constexpr traversing_iterator<Trav>
             tbegin()
-            { return this->root(); }
+            { return this->template _m_begin<traversing_iterator<Trav>>(); }
 
             template <traversal Trav>
             constexpr traversing_iterator<Trav>
             ctbegin()
                 const
-            { return this->croot(); }
+            { return this->template _m_begin<const_traversing_iterator<Trav>>(); }
+
+            /***************************************************
+             * @returns an iterator to the end.
+             ***************************************************/
+            template <traversal Trav>
+            constexpr traversing_iterator<Trav>
+            tend()
+                noexcept
+            { return _iter_traits<traversing_iterator<Trav>>::_s_to_iter(nullptr); }
+
+            /***************************************************
+             * @returns an iterator to the end.
+             ***************************************************/
+            template <traversal Trav>
+            constexpr const_traversing_iterator<Trav>
+            ctend()
+                const noexcept
+            { return _iter_traits<const_traversing_iterator<Trav>>::_s_to_iter(nullptr); }
+
+            /***************************************************
+             * @returns an iterator to the beginning, using
+             *          the default-traversal and iterator-type.
+             ***************************************************/
+            constexpr iterator 
+            begin() 
+            { return this->template tbegin<default_traversal>(); }
+
+            /***************************************************
+             * @returns an iterator to the beginning, using
+             *          the default-traversal and iterator-type.
+             ***************************************************/
+            constexpr const_iterator
+            cbegin()
+                const
+            { return this->template ctbegin<default_traversal>(); }
+
+            /***************************************************
+             * @returns an iterator to the end.
+             ***************************************************/
+            constexpr iterator 
+            end()
+                noexcept
+            { return _iter_traits<iterator>::_s_to_iter(nullptr); }
+
+            /***************************************************
+             * @returns an iterator to the end.
+             ***************************************************/
+            constexpr const_iterator
+            cend()
+                const noexcept
+            { return _iter_traits<const_iterator>::_s_to_iter(nullptr); }
+
+            /***************************************************
+             * additional modifiers.
+             ***************************************************/
+
+            /***************************************************
+             * @brief move a tree (or parts of it) 
+             *        to another location in this tree.
+             ***************************************************/
+            constexpr void
+            splice(hook_type to, const_iterator pos, _tree_mixin&& other, const_iterator src)
+                noexcept
+            {
+
+            }
+
+            /***************************************************
+             * @brief erases the subtree at the specified hook.
+             ***************************************************/
+            void
+            erase(hook_type at, iterator where)
+            {
+
+            }
         };
 
+
+        /***************************************************
+         * @brief type-aliases for base/mixin combinations.
+         ***************************************************/
 
         template <typename NodeT,
                   typename AllocT>
@@ -885,8 +1017,6 @@ namespace tl
         using _header_tree
             = _tree_mixin<_header_base<NodeT, AllocT>>;
     }
-
-
 }
 
 #endif

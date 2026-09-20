@@ -13,7 +13,8 @@ cmake_path(GET CMAKE_SOURCE_DIR PARENT_PATH treelib_DIR)
 
 set(rangev3_INCLUDE_DIR "${treelib_DIR}/range-v3")
 
-set(BUILD_EXAMPLES ON)
+set(BUILD_EXAMPLES OFF)
+set(BUILD_TESTS ON)
 
 find_package(treelib REQUIRED)
 
@@ -21,10 +22,6 @@ if (BUILD_EXAMPLES)
     add_subdirectory("examples")
 endif()
 
-# if (BUILD_TESTS)
-#     add_subdirectory("tests")
-# endif()
-
-# if (BUILD_PYTHON_BINDING)
-#     add_subdirectory("python/binding")
-# endif()
+if (BUILD_TESTS)
+    add_subdirectory("tests")
+endif()

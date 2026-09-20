@@ -52,6 +52,15 @@ namespace tl
                 : _m_children_array({nullptr})
             { }
             
+            constexpr bool
+            _m_is_leaf()
+                const noexcept
+            { 
+                return std::all_of(this->_m_children_array.cbegin(),
+                                   this->_m_children_array.cend(),
+                                   [](_m_cnode_ptr_t _p) { return _p == nullptr; });
+            }
+
             constexpr void
             _m_hook_at(_m_hook_t at, _m_node_ptr_t node)
             {
@@ -178,6 +187,11 @@ namespace tl
             using _m_base_t::_m_base_t;
 
             constexpr bool
+            _m_is_root()
+                const noexcept
+            { return this->_m_parent == nullptr; }
+
+            constexpr bool
             _m_is_last()
                 const noexcept
             {
@@ -199,22 +213,9 @@ namespace tl
             {
                 if (this->_m_is_root() || this->_m_is_last())
                     return nullptr;
-                // calculate offset of this node to get to it's position
-                // in the child_array of the parent-node
-                std::ptrdiff_t _off = this - this->_m_get_parent()->_m_child_array.cdata();
-                return this->_m_get_parent()->_m_child_array[_off + 1];
-            }
-
-            constexpr _m_cnode_ptr_t
-            _m_next_sibling()
-                const noexcept
-            {
-                if (this->_m_is_root() || this->_m_is_last())
-                    return nullptr;
-                // calculate offset of this node to get to it's position
-                // in the child_array of the parent-node
-                std::ptrdiff_t _off = this - this->_m_get_parent()->_m_child_array.cdata();
-                return this->_m_get_parent()->_m_child_array[_off + 1];
+                return *(std::find(this->_m_get_parent()->_m_children_array.begin(),
+                                   this->_m_get_parent()->_m_children_array.end(),
+                                   this) + 1);
             }
 
             constexpr _m_node_ptr_t
@@ -223,10 +224,20 @@ namespace tl
             {
                 if (this->_m_is_root() || this->_m_is_first())
                     return nullptr;
-                // calculate offset of this node to get to it's position
-                // in the child_array of the parent-node
-                std::ptrdiff_t _off = this - this->_m_get_parent()->_m_child_array.cdata();
-                return this->_m_get_parent()->_m_child_array[_off - 1];
+                return *(std::find(this->_m_get_parent()->_m_children_array.begin(),
+                                   this->_m_get_parent()->_m_children_array.end(),
+                                   this) - 1);
+            }
+
+            constexpr _m_cnode_ptr_t
+            _m_next_sibling()
+                const noexcept
+            {
+                if (this->_m_is_root() || this->_m_is_last())
+                    return nullptr;
+                return *(std::find(this->_m_get_parent()->_m_children_array.cbegin(),
+                                   this->_m_get_parent()->_m_children_array.cend(),
+                                   this) + 1);
             }
 
             constexpr _m_cnode_ptr_t
@@ -235,11 +246,11 @@ namespace tl
             {
                 if (this->_m_is_root() || this->_m_is_first())
                     return nullptr;
-                // calculate offset of this node to get to it's position
-                // in the child_array of the parent-node
-                std::ptrdiff_t _off = this - this->_m_get_parent()->_m_child_array.cdata();
-                return this->_m_get_parent()->_m_child_array[_off - 1];
+                return *(std::find(this->_m_get_parent()->_m_children_array.cbegin(),
+                                   this->_m_get_parent()->_m_children_array.cend(),
+                                   this) - 1);
             }
+
         };
 
     }

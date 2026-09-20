@@ -112,13 +112,13 @@ namespace tl
         std::vector post_order    { 3, 4, 2, 6, 7, 5, 1 };
         std::vector breadth_first { 1, 2, 5, 3, 4, 6, 7 };
 
-        assert(std::lexicographical_compare(my_tree.qbegin<traversal::depth_first>(), my_tree.end(),
+        assert(std::lexicographical_compare(my_tree.tbegin<traversal::depth_first>(), my_tree.end(),
                                             pre_order.cbegin(), pre_order.cend(), std::equal_to()));
 
-        assert(std::lexicographical_compare(my_tree.qbegin<traversal::depth_first_pre_order>(), my_tree.end(),
+        assert(std::lexicographical_compare(my_tree.tbegin<traversal::depth_first_pre_order>(), my_tree.end(),
                                             pre_order.cbegin(), pre_order.cend(), std::equal_to()));
 
-        assert(std::lexicographical_compare(my_tree.qbegin<traversal::depth_first_post_order>(), my_tree.qend<traversal::depth_first_post_order>(),
+        assert(std::lexicographical_compare(my_tree.tbegin<traversal::depth_first_post_order>(), my_tree.tend<traversal::depth_first_post_order>(),
                                             post_order.cbegin(), post_order.cend(), std::equal_to()));
 
         assert(std::lexicographical_compare(my_tree.qbegin<traversal::breadth_first>(), my_tree.qend<traversal::breadth_first>(),
@@ -165,9 +165,9 @@ namespace tl
      *    >-"rose"
      *
      ***************************************************/
-    void rose_tree_tests()
+    void outward_rose_tree_tests()
     {
-        using tree_type = rose_tree<std::string>;
+        using tree_type = outward_rose_tree<std::string>;
 
         tree_type my_tree;
 
@@ -239,6 +239,6 @@ int main(int argc, char** argv)
 {   
     tl::outward_binary_tree_tests();
     tl::binary_tree_tests();
-    tl::rose_tree_tests();
+    tl::outward_rose_tree_tests();
     return 0;
 }
