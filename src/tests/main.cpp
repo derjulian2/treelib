@@ -1,3 +1,4 @@
+
 #include <treelib/binary>
 #include <treelib/rose>
 
@@ -22,15 +23,41 @@ namespace tl
     {
         using tree_type = outward_binary_tree<int>;
     
-        tree_type my_tree(1);
-        
-        tree_type::iterator l  = my_tree.emplace(binary::left, my_tree.croot(), 2);
-        tree_type::iterator ll = my_tree.emplace(binary::left, l, 3);
-        tree_type::iterator lr = my_tree.emplace(binary::right, l, 4);
+        // tree_type my_tree(1);
+        // tree_type::iterator l  = my_tree.emplace(binary::left, my_tree.croot(), 2);
+        // tree_type::iterator ll = my_tree.emplace(binary::left, l, 3);
+        // tree_type::iterator lr = my_tree.emplace(binary::right, l, 4);
 
-        tree_type::iterator r  = my_tree.emplace(binary::right, my_tree.croot(), 5);
-        tree_type::iterator rl = my_tree.emplace(binary::left, r, 6);
-        tree_type::iterator rr = my_tree.emplace(binary::right, r, 7);
+        // tree_type::iterator r  = my_tree.emplace(binary::right, my_tree.croot(), 5);
+        // tree_type::iterator rl = my_tree.emplace(binary::left, r, 6);
+        // tree_type::iterator rr = my_tree.emplace(binary::right, r, 7);
+
+        /***************************************************
+         * @brief initializer-tests.
+         ***************************************************/
+
+        using namespace initializer;
+
+        tree_type::initializer_tree_type::_m_init_list_t d;
+        
+        tree_type my_tree =
+            initializer_tree(
+                node(1,
+                {
+                    node(2,
+                    {
+                        node(3),
+                        node(4)
+                    }),
+                    node(5,
+                    {
+                        node(6),
+                        node(7)
+                    })
+                })
+            );
+
+        std::println("{} :: initializer-tests passed", __FUNCTION__);
 
         /***************************************************
          * @brief traversal-tests.

@@ -14,6 +14,8 @@
  ***************************************************/
 
 #include <treelib/detail/bits/except.hpp>
+#include <treelib/detail/bits/initializer_tree.hpp>
+
 #include <treelib/detail/base/node.hpp>
 #include <treelib/detail/base/traits.hpp>
 #include <treelib/detail/base/iterator.hpp>
@@ -234,7 +236,9 @@ namespace tl
             using typename _m_alloc_base_t::_m_size_t;
             using typename _m_alloc_base_t::_m_node_traits_t;
             using typename _m_alloc_base_t::_m_alloc_t;
-
+            
+            using _m_init_node_t = _initializer_node<_m_value_t>;
+            using _m_init_node_ref_t = const _m_init_node_t&;
             using _m_hook_t = typename _m_node_traits_t::_m_hook_t;
 
             /***************************************************
@@ -263,11 +267,26 @@ namespace tl
 
             /***************************************************
              * @brief helper function to construct and hook
+             *        a new node from the value of an
+             *        initializer-node.
+             ***************************************************/
+            constexpr void 
+            _m_insert_init(_m_hook_t _at,
+                           _m_node_ptr_t _where, 
+                           _m_init_node_ref_t _src)
+            {
+                _m_node_ptr_t _new_node = this->_m_new_node(_src._m_value);
+                _m_node_traits_t::_s_hook_at(_where, _at, _new_node);
+                this->_m_inc_size();
+            }
+            
+            /***************************************************
+             * @brief helper function to construct and hook
              *        a new node from the value of an existing
              *        node. used in _m_copy_children.
              ***************************************************/
             constexpr void 
-            _m_emplace_copy(_m_hook_t _at,
+            _m_insert_copy(_m_hook_t _at,
                             _m_node_ptr_t _where, 
                             _m_cnode_ptr_t _src)
             {
@@ -296,7 +315,7 @@ namespace tl
                 auto _insert_fn = [&](_m_hook_t _at,
                                       _m_node_ptr_t _where, 
                                       _m_cnode_ptr_t _src) 
-                                  { this->_m_emplace_copy(_at, _where, _src); };
+                                  { this->_m_insert_copy(_at, _where, _src); };
                 _m_node_traits_t::_s_mimic(_dest, _src, _insert_fn);
             }
 
@@ -374,6 +393,11 @@ namespace tl
             using typename _m_base_t::_m_node_traits_t;
             using typename _m_base_t::_m_alloc_t;
 
+            using _m_init_tree_t = _root_initializer_tree<_m_value_t>;
+            using typename _m_base_t::_m_hook_t;
+            using typename _m_base_t::_m_init_node_t;
+            using typename _m_base_t::_m_init_node_ref_t;
+
             _m_node_ptr_t _m_root;
 
             constexpr
@@ -399,6 +423,7 @@ namespace tl
 
             using typename _m_base_t::value_type;
             using typename _m_base_t::allocator_type;
+            using initializer_tree_type = _m_init_tree_t;
 
             using _m_base_t::_m_base_t;
 
@@ -431,6 +456,24 @@ namespace tl
                 : _root_base(alloc)
             {
                 this->emplace_root(value);
+            }
+
+            /***************************************************
+             * @brief constructor (5).
+             *        build from an initializer-tree.
+             ***************************************************/
+            constexpr
+            _root_base(initializer_tree_type&& init,
+                       const allocator_type& alloc = allocator_type())
+                requires _initializable_node<_m_node_t, _m_init_node_t>
+            {
+                // capture this-pointer to insert into this tree
+                auto _insert_fn = [&](_m_hook_t _at,
+                                      _m_node_ptr_t _where, 
+                                      _m_init_node_ref_t _src) 
+                                  { this->_m_insert_init(_at, _where, _src); };
+                this->emplace_root(init._m_root._m_value);
+                this->_m_root_node()->_m_mimic_initializer(init._m_root, _insert_fn);
             }
 
             /***************************************************

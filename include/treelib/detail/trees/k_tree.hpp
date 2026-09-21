@@ -11,6 +11,8 @@
  ***************************************************/
 
 #include <treelib/detail/bits/except.hpp>
+#include <treelib/detail/bits/initializer_tree.hpp>
+
 #include <treelib/detail/base/node.hpp>
 #include <treelib/detail/base/traits.hpp>
 #include <treelib/detail/base/tree.hpp>
@@ -61,7 +63,7 @@ namespace tl
             _k_node_base()
                 : _m_children_array({nullptr})
             { }
-            
+
             constexpr bool
             _m_is_leaf()
                 const noexcept
@@ -133,6 +135,22 @@ namespace tl
                         assert(this->_m_children_array[_at] != nullptr);
                         this->_m_children_array[_at]->_m_mimic(cur, std::forward<Fn>(_insert_fn));
                     }
+                }
+            }
+
+            template <typename Fn, typename InitT>
+                requires std::invocable<Fn, _m_hook_t, _m_node_ptr_t, const InitT&>
+            constexpr void 
+            _m_mimic_initializer(const InitT& _node, Fn&& _insert_fn)
+            {
+                auto _it = _node._m_children.begin();
+                for (_m_hook_t _at = 0; 
+                     _at < K && _it != _node._m_children.end(); 
+                     ++_it, ++_at)
+                {
+                    _insert_fn(_at, this->_m_node_ptr(), *_it);
+                    assert(this->_m_children_array[_at] != nullptr);
+                    this->_m_children_array[_at]->_m_mimic_initializer(*_it, std::forward<Fn>(_insert_fn));
                 }
             }
         };
