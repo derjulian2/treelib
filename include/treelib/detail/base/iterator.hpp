@@ -18,7 +18,6 @@
 
 #include <treelib/detail/bits/except.hpp>
 #include <treelib/detail/base/node.hpp>
-#include <treelib/detail/base/traits.hpp>
 
 #include <iterator>
 #include <list>
@@ -127,7 +126,7 @@ namespace tl
             template <typename IterT>
             static constexpr _m_node_ptr_t
             _s_next(IterT& _iter)
-                requires _parent_node<_m_node_t>
+                requires _bidirectional_tree_node<_m_node_t>
             {
                 _m_node_ptr_t _node = _iter_traits<IterT>::_s_to_node(_iter);
                 if constexpr (Reversed)
@@ -163,7 +162,7 @@ namespace tl
             template <typename IterT>
             static constexpr _m_node_ptr_t
             _s_prev(IterT& _iter)
-                requires _parent_node<_m_node_t>
+                requires _bidirectional_tree_node<_m_node_t>
             {
                 _m_node_ptr_t _node = _iter_traits<IterT>::_s_to_node(_iter);
             
@@ -260,7 +259,7 @@ namespace tl
             template <typename IterT>
             static constexpr _m_node_ptr_t
             _s_next(IterT& _iter)
-                requires _parent_node<_m_node_t>
+                requires _bidirectional_tree_node<_m_node_t>
             {
                 _m_node_ptr_t _node = _iter_traits<IterT>::_s_to_node(_iter);
                 _m_node_ptr_t _next;
@@ -297,7 +296,7 @@ namespace tl
             template <typename IterT>
             static constexpr _m_node_ptr_t
             _s_prev(IterT& _iter)
-                requires _parent_node<_m_node_t>
+                requires _bidirectional_tree_node<_m_node_t>
             {
                 _m_node_ptr_t _node = _iter_traits<IterT>::_s_to_node(_iter);
                 // static_assert(false, "reverse-iteration not implemented");
@@ -1011,6 +1010,44 @@ namespace tl
         public:
 
             using _m_base_t::_m_base_t;
+        };
+
+        /***************************************************
+         * @brief uniform interface for tree-iterators.
+         ***************************************************/
+        template <typename IterT>
+        struct _iter_traits
+        {
+            using _m_iter_t = IterT;
+            using _m_node_t = typename _m_iter_t::_m_node_t;
+            using _m_node_ptr_t = typename _m_iter_t::_m_node_ptr_t;
+
+            using _m_value_t = typename IterT::value_type;
+            using _m_ref_t   = typename IterT::reference;
+            using _m_ptr_t   = typename IterT::pointer;
+
+            static constexpr bool
+            _s_constness = std::is_const_v<std::remove_reference_t<_m_ref_t>>;
+
+            static constexpr _m_iter_t
+            _s_root_begin(_m_node_ptr_t _node)
+                _treelib_noexcept_if(_m_iter_t::_s_root_begin(std::declval<_m_node_ptr_t>()))
+            { return _m_iter_t::_s_root_begin(_node); }
+
+            static constexpr _m_iter_t
+            _s_header_begin(_m_node_ptr_t _node)
+                _treelib_noexcept_if(_m_iter_t::_s_header_begin(std::declval<_m_node_ptr_t>()))
+            { return _m_iter_t::_s_header_begin(_node); }
+
+            static constexpr _m_iter_t
+            _s_to_iter(_m_node_ptr_t _node)
+                noexcept(std::is_nothrow_constructible_v<_m_iter_t, _m_node_ptr_t>)
+            { return IterT(_node); }
+
+            static constexpr _m_node_ptr_t 
+            _s_to_node(const _m_iter_t& _iter)
+                noexcept
+            { return _iter._m_cur(); }
         };
     }
 

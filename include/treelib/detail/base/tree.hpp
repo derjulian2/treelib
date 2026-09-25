@@ -17,7 +17,6 @@
 #include <treelib/detail/bits/initializer_tree.hpp>
 
 #include <treelib/detail/base/node.hpp>
-#include <treelib/detail/base/traits.hpp>
 #include <treelib/detail/base/iterator.hpp>
 
 #include <cassert>
@@ -76,6 +75,22 @@ namespace tl
                 _m_node_alloc_traits_t::construct(this->_m_node_alloc, _res, std::forward<Args>(_args)...);
                 return _res;
             }
+
+            /***************************************************
+             * @brief allocates and constructs a fresh node-
+             *        instance containing an instance of
+             *        value_type, constructed from args.
+             *
+             *        additionally passes node-allocator to
+             *        the newly created node.
+             * @see   tl::_detail::_dynamic_node for more.
+             ***************************************************/
+            template <typename... Args>
+            [[nodiscard]]
+            constexpr _m_vnode_ptr_t 
+            _m_new_node(Args&&... _args)
+                requires _dynamic_tree_node<_m_node_t>
+            { return this->_m_new_node(this->_m_node_alloc, std::forward<Args>(_args)...); }
 
             /***************************************************
              * @brief destructs and deallocates a node-instance.
@@ -309,7 +324,7 @@ namespace tl
              ***************************************************/
             constexpr void
             _m_copy_children(_m_node_ptr_t _dest, _m_cnode_ptr_t _src)
-                requires _copyable_node<_m_node_t>
+                requires _copyable_tree_node<_m_node_t>
             {
                 // capture this-pointer to insert into this tree
                 auto _insert_fn = [&](_m_hook_t _at,
@@ -460,7 +475,7 @@ namespace tl
 
             /***************************************************
              * @brief constructor (5).
-             *        build from an initializer-tree.
+             *        construct from an initializer-tree.
              ***************************************************/
             constexpr
             _root_base(initializer_tree_type&& init,

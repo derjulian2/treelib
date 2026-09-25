@@ -43,17 +43,35 @@ namespace tl
         struct _visitor : public Fns...
         { using Fns::operator()...; };
 
-        template <typename NodeT>
+        /*************************************************************
+         * @brief   base-class for rosetree-nodes that hold
+         *          pointers to their child-nodes in 
+         *          an instance of std::vector.
+         *
+         * @details this node-type will be a 'dynamic-node'
+         *          as in that it requires additional dynamic
+         *          memory to function. 
+         * @see     tl::_detail::_dynamic_node for more.
+         *************************************************************/
+        template <typename NodeT,
+                  typename AllocT>
         struct _vecrose_node_base
         {   
             using _m_node_t      = NodeT;
             using _m_node_ptr_t  = _m_node_t*;
             using _m_cnode_ptr_t = const _m_node_t*;
 
+            using _m_alloc_t = AllocT;
+            using _m_alloc_traits_t = std::allocator_traits<_m_alloc_t>;
+            using _m_childvec_alloc_t
+                = typename _m_alloc_traits_t::template rebind_alloc<_m_node_ptr_t>;
+            using _m_childvec_alloc_traits_t
+                = std::allocator_traits<_m_childvec_alloc_t>;
+
             // either an index, or first/last
             using _m_hook_t = std::variant<std::size_t, vrose>;
 
-            std::vector<_m_node_ptr_t> _m_child_vec;
+            std::vector<_m_node_ptr_t, _m_childvec_alloc_t> _m_child_vec;
 
             constexpr _m_node_ptr_t
             _m_node_ptr()
@@ -65,8 +83,8 @@ namespace tl
                 const noexcept
             { return static_cast<_m_cnode_ptr_t>(this); }
 
-            _vecrose_node_base()
-                : _m_child_vec()
+            _vecrose_node_base(const _m_alloc_t& _alloc)
+                : _m_child_vec(_alloc)
             { }
 
             constexpr void
