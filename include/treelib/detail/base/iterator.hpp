@@ -5,20 +5,17 @@
 /***************************************************
  * @file   treelib/detail/base/iterator.hpp
  * @author Julian Benzel
- * @date   14.09.2026
+ * @date   25.09.2026
  *
  * @brief  classes to enable various methods of
  *         tree-traversal (depth-first/breadth-first)
  *         between instances of a node-type.
- *
- * @todo   - other iterator-types
- *         - depth-first in-order/post-order traversals
- *         - tree-meta info struct 'node_info'
  ***************************************************/
 
 #include <treelib/detail/bits/except.hpp>
 #include <treelib/detail/base/node.hpp>
 
+#include <memory>
 #include <iterator>
 #include <list>
 #include <algorithm>
@@ -27,11 +24,9 @@
 namespace tl
 {
     /***************************************************
-     * @brief traversal-selection interface.
+     * @brief values for traversal-strategy selection.
      ***************************************************/
-
     enum struct traversal
-        // somehow convert a value here to a traversal-type
     {
         depth_first_pre_order,
         depth_first_in_order,
@@ -39,18 +34,24 @@ namespace tl
         depth_first_reverse_pre_order,
         depth_first_reverse_in_order,
         depth_first_reverse_post_order,
+        // alias for depth_first_pre_order
         depth_first,
+
 
         breadth_first_in_order,
         breadth_first_reverse_order,
+        // alias for breadth_first_in_order
         breadth_first
     };
 
     namespace _detail
     {  
+        template <typename IterT>
+        struct _iter_traits;
+
         /***************************************************
          * @brief type that is stored within the queue
-         *        of queued iterators. contains a node-ptr
+         *        of queued-iterators. contains a node-ptr
          *        and a boolean flag, indicating if this
          *        node was already expanded or not.
          ***************************************************/
@@ -83,13 +84,13 @@ namespace tl
             { this->_m_expanded = true; }
         };
 
-
         /***************************************************
-         * @brief traversal-type for depth-first-pre-order.
-         *        
-         * @details depth-first-pre-order traverses the
-         *          current-node first and then moves on
-         *          to the child-nodes afterwards.  
+         * @brief traversal-implementation-type 
+         *        for depth-first-pre-order.
+         *      
+         *        depth-first-pre-order traverses the
+         *        current-node first and then moves on
+         *        to the child-nodes afterwards.  
          ***************************************************/
         template <bool Reversed,
                   typename NodeT>
@@ -99,99 +100,25 @@ namespace tl
             using _m_node_traits_t = _node_traits<_m_node_t>;
             using _m_node_ptr_t    = typename _m_node_traits_t::_m_ptr_t;
 
+            /***************************************************
+             * queue-expansion for queued-iterators.
+             ***************************************************/
+
             using _m_thunk_t = _queue_thunk<_m_node_t>;
-            using _m_queue_t = std::list<_m_thunk_t>;
-            using _m_iter_t  = typename _m_queue_t::iterator;
+            template <typename QueueAllocT>
+            using _m_queue_t = std::list<_m_thunk_t, QueueAllocT>;
+            template <typename QueueAllocT>
+            using _m_iter_t  = typename _m_queue_t<QueueAllocT>::iterator;
 
-            struct _traversing_iter_state
-            { };
-            
-            using _m_iter_state_t = _traversing_iter_state;
-
-            template <typename IterT>
-            static constexpr IterT
-            _s_root_begin(_m_node_ptr_t _node)
-                noexcept(std::is_nothrow_copy_constructible_v<IterT>)
-            { return _iter_traits<IterT>::_s_to_iter(_node); }
-
-            template <typename IterT>
-            static constexpr IterT
-            _s_header_begin(_m_node_ptr_t _node)
-            { return std::next(_iter_traits<IterT>::_s_to_iter(_node)); }
-
-            /***************************************************
-             * @brief   determines the next node for
-             *          iterative-traversal.
-             ***************************************************/
-            template <typename IterT>
-            static constexpr _m_node_ptr_t
-            _s_next(IterT& _iter)
-                requires _bidirectional_tree_node<_m_node_t>
-            {
-                _m_node_ptr_t _node = _iter_traits<IterT>::_s_to_node(_iter);
-                if constexpr (Reversed)
-                {
-                    if (!_m_node_traits_t::_s_is_leaf(_node))
-                        return _m_node_traits_t::_s_last_child(_node);
-                    while (!(_node = _m_node_traits_t::_s_prev_sibling(_node)))   
-                    {
-                        _node = _m_node_traits_t::_s_parent(_node);
-                        if (_m_node_traits_t::_s_is_root(_node))
-                            return nullptr;
-                    }
-                    return _node;
-                }
-                else
-                {
-                    if (!_m_node_traits_t::_s_is_leaf(_node))
-                        return _m_node_traits_t::_s_first_child(_node);
-                    while (!(_node = _m_node_traits_t::_s_next_sibling(_node)))   
-                    {
-                        _node = _m_node_traits_t::_s_parent(_node);
-                        if (_m_node_traits_t::_s_is_root(_node))
-                            return nullptr;
-                    }
-                    return _node;
-                }
-            }
-
-            /***************************************************
-             * @brief   determines the previous node for
-             *          iterative-traversal.
-             ***************************************************/
-            template <typename IterT>
-            static constexpr _m_node_ptr_t
-            _s_prev(IterT& _iter)
-                requires _bidirectional_tree_node<_m_node_t>
-            {
-                _m_node_ptr_t _node = _iter_traits<IterT>::_s_to_node(_iter);
-            
-                // static_assert(false, "reverse-iteration not implemented");
-                if constexpr (Reversed)
-                {
-
-                }
-                else
-                {
-
-                }
-                return _node;
-            }
-
-            /***************************************************
-             * @brief   expands the node pointed to by '_first'
-             *          to it's children and inserts them
-             *          just after '_first', forming the depth-
-             *          first-traversal, node-by-node.
-             *
-             * @returns an iterator to the next node in the
-             *          traversal-sequence.
-             ***************************************************/
-            static constexpr _m_iter_t
-            _s_expand_queue(_m_iter_t _first, _m_queue_t& _queue)
+            // inserts child-nodes after '_first' and returns
+            // iterator to first-child 
+            template <typename QueueAllocT>
+            static constexpr _m_iter_t<QueueAllocT>
+            _s_expand_queue(_m_iter_t<QueueAllocT> _first, 
+                            _m_queue_t<QueueAllocT>& _queue)
             {
                 _first->_m_set();
-                _m_iter_t _next = std::next(_first);
+                _m_iter_t<QueueAllocT> _next = std::next(_first);
                 // 'drag' the iterator one down after each 
                 // insert, to insert sequentially after _first
                 if constexpr (Reversed)
@@ -206,15 +133,85 @@ namespace tl
                 // return first-child or next
                 return std::next(_first);
             }
+
+            /***************************************************
+             * state-variables and next/prev algorithms
+             * for traversing-iterators.
+             ***************************************************/
+
+            // no additional state required
+            struct _traversing_iter_state
+            { };
+            using _m_iter_state_t = _traversing_iter_state;
+
+            template <typename IterT>
+            static constexpr _m_node_ptr_t
+            _s_next(IterT& _iter)
+                requires _bidirectional_tree_node<_m_node_t>
+            {
+                _m_node_ptr_t _node = _iter_traits<IterT>::_s_to_node(_iter);
+                _m_node_ptr_t _sibling = nullptr;
+                if constexpr (Reversed)
+                {
+                    if (!_m_node_traits_t::_s_is_leaf(_node))
+                        return _m_node_traits_t::_s_last_child(_node);
+                    while (!(_sibling = _m_node_traits_t::_s_prev_sibling(_node)))   
+                    {
+                        _node = _m_node_traits_t::_s_parent(_node);
+                        if (_m_node_traits_t::_s_is_root(_node))
+                            return nullptr;
+                    }
+                    return _sibling ? _sibling : _node;
+                }
+                else
+                {
+                    if (!_m_node_traits_t::_s_is_leaf(_node))
+                        return _m_node_traits_t::_s_first_child(_node);
+                    while (!(_sibling = _m_node_traits_t::_s_next_sibling(_node)))   
+                    {
+                        _node = _m_node_traits_t::_s_parent(_node);
+                        if (_m_node_traits_t::_s_is_root(_node))
+                            return nullptr;
+                    }
+                    return _sibling ? _sibling : _node;
+                }
+            }
+
+            // reverse-iteration not implemented yet
+            template <typename IterT>
+            static constexpr _m_node_ptr_t
+            _s_prev(IterT& _iter)
+                requires _bidirectional_tree_node<_m_node_t>
+            {
+                assert(false);
+                return nullptr;
+            }
+
+            /***************************************************
+             * find traversal-begin from root/header-node.
+             ***************************************************/
+
+            // root-node is the pre-order begin-node
+            template <typename IterT>
+            static constexpr void
+            _s_root_begin(IterT& _iter)
+            { }
+
+            // skip to first-child of header-node
+            template <typename IterT>
+            static constexpr void
+            _s_header_begin(IterT& _iter)
+            { ++_iter; }
         };
 
-
         /***************************************************
-         * @brief traversal-type for depth-first-post-order.
-         *        
-         * @details depth-first-post-order traverses the
-         *          current-node's children first, and then 
-         *          moves on to the current-node afterwards.
+         * @brief traversal-implementation-type 
+         *        for depth-first-post-order.
+         *      
+         *        depth-first-post-order traverses the
+         *        current-node's children first and visits
+         *        the node only after all children have
+         *        been visited.
          ***************************************************/
         template <bool Reversed,
                   typename NodeT>
@@ -224,9 +221,78 @@ namespace tl
             using _m_node_traits_t = _node_traits<_m_node_t>;
             using _m_node_ptr_t    = typename _m_node_traits_t::_m_ptr_t;
 
+            /***************************************************
+             * queue-expansion for queued-iterators.
+             ***************************************************/
+
             using _m_thunk_t = _queue_thunk<_m_node_t>;
-            using _m_queue_t = std::list<_m_thunk_t>;
-            using _m_iter_t  = typename _m_queue_t::iterator;
+            template <typename QueueAllocT>
+            using _m_queue_t = std::list<_m_thunk_t, QueueAllocT>;
+            template <typename QueueAllocT>
+            using _m_iter_t  = typename _m_queue_t<QueueAllocT>::iterator;
+
+            // if _node is the last child of it's
+            // sibling-chain, the correct post-order
+            // traversal may require the next node
+            // to be expanded before handing off to
+            // the parent-node.
+            template <typename QueueAllocT>
+            static constexpr _m_iter_t<QueueAllocT>
+            _s_maybe_expand_next(_m_iter_t<QueueAllocT> _node, 
+                                 _m_queue_t<QueueAllocT>& _queue)
+            {
+                _m_iter_t<QueueAllocT> _maybe_parent = std::next(_node);
+                if (_maybe_parent != _queue.end()
+                    && _m_node_traits_t::_s_is_last_child_of(_maybe_parent->_m_node, _node->_m_node))
+                {
+                    // maybe just checking the next-next is enough?
+                    _m_iter_t<QueueAllocT> _unexpanded = std::find_if(std::next(_maybe_parent), _queue.end(),
+                                                         [](const _m_thunk_t& _t) { return !_t._m_expanded; });
+                    if (_unexpanded != _queue.end())
+                        _s_expand_queue(_unexpanded, _queue);
+                }
+                return _maybe_parent;
+            }
+
+            template <typename QueueAllocT>
+            static constexpr _m_iter_t<QueueAllocT>
+            _s_expand_queue(_m_iter_t<QueueAllocT> _first, 
+                            _m_queue_t<QueueAllocT>& _queue)
+            {
+                _first->_m_set();
+                if (_m_node_traits_t::_s_is_leaf(_first->_m_node))
+                    return _s_maybe_expand_next(_first, _queue);
+
+                // capture iterator to first-child for recursive search
+                bool _first_child = true;
+            #define _treelib_insert_capture_first(_varname, _where) \
+                { if (_first_child) \
+                { _varname = _queue.emplace(_where, _child); _first_child = false; } \
+                else \
+                { _queue.emplace(_where, _child); } }
+                
+                _m_iter_t<QueueAllocT> _res;
+                if constexpr (Reversed)
+                    for (_m_node_ptr_t _child :
+                         _m_node_traits_t::_s_children(_first->_m_node)
+                         | std::views::reverse)
+                        _treelib_insert_capture_first(_res, _first)
+                else
+                    for (_m_node_ptr_t _child :
+                         _m_node_traits_t::_s_children(_first->_m_node))
+                        _treelib_insert_capture_first(_res, _first)
+        
+            #undef _treelib_capture_first
+                // keep expanding until first-child is a leaf
+                if (!_m_node_traits_t::_s_is_leaf(_res->_m_node))
+                    return _s_expand_queue(_res, _queue);
+                return _res;
+            }
+
+            /***************************************************
+             * state-variables and next/prev algorithms
+             * for traversing-iterators.
+             ***************************************************/
 
             struct _traversing_iter_state
             {
@@ -237,25 +303,14 @@ namespace tl
                  * https://github.com/kpeeters/tree.hh
                  ***************************************************/
                 _m_flag_t _m_skip_children;
+
+                constexpr
+                _traversing_iter_state()
+                    : _m_skip_children(false)
+                { }
             };
-            
             using _m_iter_state_t = _traversing_iter_state;
 
-            template <typename IterT>
-            static constexpr IterT
-            _s_root_begin(_m_node_ptr_t _node)
-                noexcept(std::is_nothrow_copy_constructible_v<IterT>)
-            { return std::next(_iter_traits<IterT>::_s_to_iter(_node)); }
-
-            template <typename IterT>
-            static constexpr IterT
-            _s_header_begin(_m_node_ptr_t _node)
-            { return std::next(_iter_traits<IterT>::_s_to_iter(_node)); }
-
-            /***************************************************
-             * @brief   determines the next node for
-             *          iterative-traversal.
-             ***************************************************/
             template <typename IterT>
             static constexpr _m_node_ptr_t
             _s_next(IterT& _iter)
@@ -289,100 +344,41 @@ namespace tl
                 }   
             }
 
-            /***************************************************
-             * @brief   determines the previous node for
-             *          iterative-traversal.
-             ***************************************************/
+            // reverse-iteration not implemented yet
             template <typename IterT>
             static constexpr _m_node_ptr_t
             _s_prev(IterT& _iter)
                 requires _bidirectional_tree_node<_m_node_t>
             {
-                _m_node_ptr_t _node = _iter_traits<IterT>::_s_to_node(_iter);
-                // static_assert(false, "reverse-iteration not implemented");
-                if constexpr (Reversed)
-                {
-
-                }
-                else
-                {
-
-                }
-                return _node;
+                assert(false);
+                return nullptr;
             }
 
             /***************************************************
-             * @brief if _node is the last child of it's
-             *        sibling-chain, the correct post-order
-             *        traversal may require the next node
-             *        to be expanded before handing off to
-             *        the parent-node.
+             * find traversal-begin from root/header-node.
              ***************************************************/
-            static constexpr _m_iter_t
-            _s_maybe_expand_next(_m_iter_t _node, _m_queue_t& _queue)
-            {
-                _m_iter_t _maybe_parent = std::next(_node);
-                if (_maybe_parent != _queue.end()
-                    && _m_node_traits_t::_s_is_last_child_of(_maybe_parent->_m_node, _node->_m_node))
-                {
-                    _m_iter_t _unexpanded = std::find_if(std::next(_maybe_parent), _queue.end(),
-                                                         [](const _m_thunk_t& _t) { return !_t._m_expanded; });
-                    if (_unexpanded != _queue.end())
-                        _s_expand_queue(_unexpanded, _queue);
-                }
-                return _maybe_parent;
-            }
 
-            /***************************************************
-             * @brief   expands the node pointed to by '_first'
-             *          recursively to it's children until a
-             *          leaf-node is found.
-             *
-             * @returns an iterator to the next node in the
-             *          traversal-sequence.
-             ***************************************************/
-            static constexpr _m_iter_t
-            _s_expand_queue(_m_iter_t _first, _m_queue_t& _queue)
-            {
-                _first->_m_set();
-                if (_m_node_traits_t::_s_is_leaf(_first->_m_node))
-                    return _s_maybe_expand_next(_first, _queue);
+            // skip to leftmost
+            template <typename IterT>
+            static constexpr void
+            _s_root_begin(IterT& _iter)
+            { ++_iter; }
 
-                // capture iterator to first-child for recursive search
-                bool _first_child = true;
-            #define _treelib_insert_capture_first(_varname, _where) \
-                { if (_first_child) \
-                { _varname = _queue.emplace(_where, _child); _first_child = false; } \
-                else \
-                { _queue.emplace(_where, _child); } }
-                
-                _m_iter_t _res;
-                if constexpr (Reversed)
-                    for (_m_node_ptr_t _child :
-                         _m_node_traits_t::_s_children(_first->_m_node)
-                         | std::views::reverse)
-                        _treelib_insert_capture_first(_res, _first)
-                else
-                    for (_m_node_ptr_t _child :
-                         _m_node_traits_t::_s_children(_first->_m_node))
-                        _treelib_insert_capture_first(_res, _first)
-        
-            #undef _treelib_capture_first
-                // keep expanding until first-child is a leaf
-                if (!_m_node_traits_t::_s_is_leaf(_res->_m_node))
-                    return _s_expand_queue(_res, _queue);
-                return _res;
-            }
+            // skip to leftmost
+            template <typename IterT>
+            static constexpr void
+            _s_header_begin(IterT& _iter)
+            { ++_iter; }
         };
 
-
         /***************************************************
-         * @brief traversal-type for depth-first-in-order.
-         *        
-         * @details depth-first-in-order traverses the
-         *          first half of current-node's children first, 
-         *          then the current node, and then the other
-         *          half afterwards.
+         * @brief traversal-implementation-type 
+         *        for depth-first-in-order.
+         *      
+         *        depth-first-in-order traverses half of
+         *        the current-node's children first, then 
+         *        visits current-node itself and finishes
+         *        with the other half of the children.
          ***************************************************/
         template <bool Reversed,
                   typename NodeT>
@@ -392,53 +388,54 @@ namespace tl
             using _m_node_traits_t = _node_traits<_m_node_t>;
             using _m_node_ptr_t    = typename _m_node_traits_t::_m_ptr_t;
 
-            using _m_thunk_t = _queue_thunk<_m_node_t>;
-            using _m_queue_t = std::list<_m_thunk_t>;
-            using _m_iter_t  = typename _m_queue_t::iterator;
+            // using _m_thunk_t = _queue_thunk<_m_node_t>;
+            // using _m_queue_t = std::list<_m_thunk_t>;
+            // using _m_iter_t  = typename _m_queue_t::iterator;
 
-            /***************************************************
-             * @brief   expands the node pointed to by '_first'
-             *          to 
-             *
-             * @returns an iterator to the next node in the
-             *          traversal-sequence.
-             ***************************************************/
-            static constexpr _m_iter_t
-            _s_expand_queue(_m_iter_t _first, _m_queue_t& _queue)
-            {
-                if (_queue.empty())
-                    return _first;
+            // static constexpr _m_iter_t
+            // _s_expand_queue(_m_iter_t _first, _m_queue_t& _queue)
+            // {
+            //     if (_queue.empty())
+            //         return _first;
                 
-                std::size_t _child_count 
-                    = _m_node_traits_t::_s_child_count(_first->_m_node);
-                std::size_t _half      = _child_count / 2;
+            //     std::size_t _child_count 
+            //         = _m_node_traits_t::_s_child_count(_first->_m_node);
+            //     std::size_t _half      = _child_count / 2;
 
-                _first->_m_set();
-                _m_iter_t _res = _first;
-                if constexpr (Reversed)
-                    for (_m_node_ptr_t _child :
-                         _m_node_traits_t::_s_children(*_first)
-                         | std::views::reverse)
-                        _res = _queue.insert(_res, _m_thunk_t(_child));
-                else
-                    for (_m_node_ptr_t _child :
-                         _m_node_traits_t::_s_children(_first->_m_node))
-                    {
-                        if (_child_count > _half)
-                            _res = _queue.insert(_res, _m_thunk_t(_child));
-                        else
-                            _queue.insert(++_first, _m_thunk_t(_child));
-                        --_child_count;
-                    }
-                // recursively insert, because in-order
-                // visits the deepest first
-                return _s_expand_queue(_res, _queue);
-            }
+            //     _first->_m_set();
+            //     _m_iter_t _res = _first;
+            //     if constexpr (Reversed)
+            //         for (_m_node_ptr_t _child :
+            //              _m_node_traits_t::_s_children(*_first)
+            //              | std::views::reverse)
+            //             _res = _queue.insert(_res, _m_thunk_t(_child));
+            //     else
+            //         for (_m_node_ptr_t _child :
+            //              _m_node_traits_t::_s_children(_first->_m_node))
+            //         {
+            //             if (_child_count > _half)
+            //                 _res = _queue.insert(_res, _m_thunk_t(_child));
+            //             else
+            //                 _queue.insert(++_first, _m_thunk_t(_child));
+            //             --_child_count;
+            //         }
+            //     // recursively insert, because in-order
+            //     // visits the deepest first
+            //     return _s_expand_queue(_res, _queue);
+            // }
         };
 
-
         /***************************************************
-         * @brief traversal-type for breadth-first.
+         * @brief traversal-implementation-type 
+         *        for breadth-first/level-order.
+         *      
+         *        depth-first-in-order traverses half of
+         *        the current-node's children first, then 
+         *        visits current-node itself and finishes
+         *        with the other half of the children.
+         *
+         * @note  traversing-iterators do not support
+         *        breadth-first.
          ***************************************************/
         template <bool Reversed,
                   typename NodeT>
@@ -448,32 +445,22 @@ namespace tl
             using _m_node_traits_t = _node_traits<_m_node_t>;
             using _m_node_ptr_t    = typename _m_node_traits_t::_m_ptr_t;
 
-            using _m_thunk_t = _queue_thunk<_m_node_t>;
-            using _m_queue_t = std::list<_m_thunk_t>;
-            using _m_iter_t  = typename _m_queue_t::iterator;
-
-            template <typename IterT>
-            static constexpr IterT
-            _s_root_begin(_m_node_ptr_t _node)
-                noexcept(std::is_nothrow_copy_constructible_v<IterT>)
-            { return _iter_traits<IterT>::_s_to_iter(_node); }
-
-            template <typename IterT>
-            static constexpr IterT
-            _s_header_begin(_m_node_ptr_t _node)
-            { return std::next(_iter_traits<IterT>::_s_to_iter(_node)); }
-
             /***************************************************
-             * @brief   expands the node pointed to by '_first'
-             *          to it's children and inserts them
-             *          at the back of the queue, forming the 
-             *          breadth-first-traversal, node-by-node.
-             *
-             * @returns an iterator to the next node in the
-             *          traversal-sequence.
+             * queue-expansion for queued-iterators.
              ***************************************************/
-            static constexpr _m_iter_t
-            _s_expand_queue(_m_iter_t _first, _m_queue_t& _queue)
+
+            using _m_thunk_t = _queue_thunk<_m_node_t>;
+            template <typename QueueAllocT>
+            using _m_queue_t = std::list<_m_thunk_t, QueueAllocT>;
+            template <typename QueueAllocT>
+            using _m_iter_t  = typename _m_queue_t<QueueAllocT>::iterator;
+
+            // inserts all children at the back of the queue to
+            // visit all nodes of the current level before them
+            template <typename QueueAllocT>
+            static constexpr _m_iter_t<QueueAllocT>
+            _s_expand_queue(_m_iter_t<QueueAllocT> _first, 
+                            _m_queue_t<QueueAllocT>& _queue)
             {
                 _first->_m_set();
                 if constexpr (Reversed)
@@ -487,6 +474,22 @@ namespace tl
                         _queue.emplace_back(_child);
                 return std::next(_first);
             }
+
+            /***************************************************
+             * find traversal-begin from root/header-node.
+             ***************************************************/
+
+            // root-node is the level-order begin-node
+            template <typename IterT>
+            static constexpr void
+            _s_root_begin(IterT& _iter)
+            { }
+
+            // skip to first-child of header-node
+            template <typename IterT>
+            static constexpr void
+            _s_header_begin(IterT& _iter)
+            { ++_iter; }
         };
 
         /***************************************************
@@ -525,7 +528,6 @@ namespace tl
         struct _to_traversal<traversal::depth_first, NodeT>
         { using _m_trav_t = _detail::_depth_first_pre_order<false, NodeT>; };
 
-
         template <typename NodeT>
         struct _to_traversal<traversal::breadth_first_in_order, NodeT>
         { using _m_trav_t = _detail::_breadth_first<false, NodeT>; };
@@ -538,7 +540,7 @@ namespace tl
         struct _to_traversal<traversal::breadth_first, NodeT>
         { using _m_trav_t = _detail::_breadth_first<false, NodeT>; };
 
-
+        // _t-abbreviation
         template <traversal Trav, typename NodeT>
         using _to_traversal_t = _to_traversal<Trav, NodeT>::_m_trav_t;
 
@@ -763,14 +765,14 @@ namespace tl
         };
 
 
-        /***************************************************
+        /********************************************************
          * @brief CRTP-base for traversing-iteration.
          *        
          * @note  some traversal-methods require more
          *        state than others (some booleans or pointers
          *        to certain points), this class inherits
-         *        these states based on the traversal-type.
-         ***************************************************/
+         *        these state-types based on the traversal-type.
+         ********************************************************/
         template <bool IsConst,
                   typename ValueT,
                   typename TraversalT,
@@ -790,13 +792,27 @@ namespace tl
 
             _m_node_ptr_t _m_node;
 
+            /***************************************************
+             * find traversal-begin from root/header-node.
+             ***************************************************/
+
+            // no further modifications necessary
             static constexpr _m_iter_t
             _s_root_begin(_m_node_ptr_t _node)
-            { return _m_trav_t::template _s_root_begin<_m_iter_t>(_node); }
+            {
+                _m_iter_t _iter(_node);
+                _m_trav_t::_s_root_begin(_iter);
+                return _iter;
+            }
 
+            // no further modifications necessary
             static constexpr _m_iter_t
             _s_header_begin(_m_node_ptr_t _node)
-            { return _m_trav_t::template _s_header_begin<_m_iter_t>(_node); }
+            { 
+                _m_iter_t _iter(_node);
+                _m_trav_t::_s_header_begin(_iter);
+                return _iter;
+            }
 
             constexpr _m_node_ptr_t
             _m_cur()
@@ -830,6 +846,9 @@ namespace tl
                 this->_m_node = _m_trav_t::_s_prev(*this);
                 return *this->_m_iter(); 
             }
+
+            using _m_base_t::operator++;
+            using _m_base_t::operator--;
         };
 
 
@@ -839,6 +858,7 @@ namespace tl
         template <bool IsConst,
                   typename ValueT,
                   typename TraversalT,
+                  typename QueueAllocT,
                   typename IterT>
         class _queued_iterator_base
             : public _iter_base<IsConst, ValueT, typename TraversalT::_m_node_t, IterT>
@@ -852,8 +872,11 @@ namespace tl
             using typename _m_base_t::_m_node_ptr_t;
 
             using _m_thunk_t = _queue_thunk<_m_node_t>;
+            using _m_alloc_t = QueueAllocT;
+            using _m_queue_alloc_t 
+                = std::allocator_traits<_m_alloc_t>::template rebind_alloc<_m_thunk_t>;
             using _m_queue_t /* this type is a cutie */ 
-                = std::list<_m_thunk_t>;
+                = std::list<_m_thunk_t, _m_queue_alloc_t>;
             using _m_queue_iter_t = typename _m_queue_t::iterator;
 
             friend _m_base_t;
@@ -861,16 +884,27 @@ namespace tl
             _m_queue_t      _m_queue;
             _m_queue_iter_t _m_queue_cur;
 
-            static constexpr _m_iter_t
-            _s_root_begin(_m_node_ptr_t _node)
-            { return _m_trav_t::template _s_root_begin<_m_iter_t>(_node); }
+            /***************************************************
+             * find traversal-begin from root/header-node.
+             ***************************************************/
 
+            // no further modifications necessary
             static constexpr _m_iter_t
-            _s_header_begin(_m_node_ptr_t _node)
+            _s_root_begin(_m_node_ptr_t _node, const _m_alloc_t& _alloc)
             { 
-                _m_iter_t _res = _m_trav_t::template _s_header_begin<_m_iter_t>(_node);
-                std::erase_if(_res._m_queue, [&](const _m_thunk_t& _t) { return _t._m_node == _node; });
-                return _res;
+                _m_iter_t _iter(_node, _alloc);
+                _m_trav_t::_s_root_begin(_iter);
+                return _iter; 
+            }
+
+            // additionally erase header from queue
+            static constexpr _m_iter_t
+            _s_header_begin(_m_node_ptr_t _node, const _m_alloc_t& _alloc)
+            { 
+                _m_iter_t _iter(_node, _alloc);
+                _m_trav_t::_s_header_begin(_iter);
+                std::erase_if(_iter._m_queue, [&](const _m_thunk_t& _t) { return _t._m_node == _node; });
+                return _iter;
             }
 
             constexpr _m_node_ptr_t 
@@ -895,18 +929,20 @@ namespace tl
             { return !this->_m_queue_cur->_m_expanded; }
 
             constexpr explicit
-            _queued_iterator_base(_m_node_ptr_t _node)
-                : _m_queue({_m_thunk_t(_node)})
+            _queued_iterator_base(_m_node_ptr_t _node,
+                                  const _m_alloc_t& _alloc = _m_alloc_t())
+                : _m_queue({_m_thunk_t(_node)}, _alloc)
                 , _m_queue_cur(_m_queue.begin())
             { }
 
         public:
 
             using traversal_type = _m_trav_t;  
+            using queue_allocator_type = _m_queue_alloc_t;
 
             constexpr
-            _queued_iterator_base()
-                : _m_queue()
+            _queued_iterator_base(const queue_allocator_type& alloc = queue_allocator_type())
+                : _m_queue(alloc)
                 , _m_queue_cur(this->_m_queue.end())
             { }
 
@@ -926,6 +962,9 @@ namespace tl
                 --this->_m_queue_cur;
                 return *this->_m_iter(); 
             }
+
+            using _m_base_t::operator++;
+            using _m_base_t::operator--;
         };
 
         /**********************************************
@@ -938,16 +977,9 @@ namespace tl
 
         template <bool IsConst,
                   typename ValueT,
-                  typename TraversalT>
+                  typename TraversalT,
+                  typename QueueAllocT>
         class _queued_iterator;
-
-        template <bool IsConst,
-                  typename ValueT,
-                  typename TraversalT>
-        using _queued_iter_base
-            = _convertible_iter<IsConst, ValueT, typename TraversalT::_m_node_t,
-                _queued_iterator_base<IsConst, ValueT, TraversalT,
-                  _queued_iterator<IsConst, ValueT, TraversalT>>>;
 
         template <bool IsConst,
                   typename ValueT,
@@ -956,12 +988,20 @@ namespace tl
 
         template <bool IsConst,
                   typename ValueT,
+                  typename TraversalT,
+                  typename QueueAllocT>
+        using _queued_iter_base
+            = _convertible_iter<IsConst, ValueT, typename TraversalT::_m_node_t,
+                _queued_iterator_base<IsConst, ValueT, TraversalT, QueueAllocT,
+                  _queued_iterator<IsConst, ValueT, TraversalT, QueueAllocT>>>;
+
+        template <bool IsConst,
+                  typename ValueT,
                   typename TraversalT>
         using _traversing_iter_base
             = _convertible_iter<IsConst, ValueT, typename TraversalT::_m_node_t,
                 _traversing_iterator_base<IsConst, ValueT, TraversalT,
                   _traversing_iterator<IsConst, ValueT, TraversalT>>>;
-
 
         /***************************************************
          * @brief iterator that traverses a tree iteratively, 
@@ -987,20 +1027,20 @@ namespace tl
             using _m_base_t::_m_base_t;
         };
 
-
         /***************************************************
          * @brief iterator that traverses a tree by
          *        progressively building up a queue of nodes.
          ***************************************************/
         template <bool IsConst,
                   typename ValueT,
-                  typename TraversalT>
+                  typename TraversalT,
+                  typename QueueAllocT>
         class _queued_iterator
-            : public _queued_iter_base<IsConst, ValueT, TraversalT>
+            : public _queued_iter_base<IsConst, ValueT, TraversalT, QueueAllocT>
         {
         protected:
 
-            using _m_base_t      = _queued_iter_base<IsConst, ValueT, TraversalT>;
+            using _m_base_t      = _queued_iter_base<IsConst, ValueT, TraversalT, QueueAllocT>;
             using _m_iter_base_t = typename _m_base_t::_m_base_t;
             using typename _m_base_t::_m_iter_t;
 
@@ -1018,8 +1058,8 @@ namespace tl
         template <typename IterT>
         struct _iter_traits
         {
-            using _m_iter_t = IterT;
-            using _m_node_t = typename _m_iter_t::_m_node_t;
+            using _m_iter_t     = IterT;
+            using _m_node_t     = typename _m_iter_t::_m_node_t;
             using _m_node_ptr_t = typename _m_iter_t::_m_node_ptr_t;
 
             using _m_value_t = typename IterT::value_type;
@@ -1029,20 +1069,23 @@ namespace tl
             static constexpr bool
             _s_constness = std::is_const_v<std::remove_reference_t<_m_ref_t>>;
 
+            template <typename... ArgsTs>
             static constexpr _m_iter_t
-            _s_root_begin(_m_node_ptr_t _node)
-                _treelib_noexcept_if(_m_iter_t::_s_root_begin(std::declval<_m_node_ptr_t>()))
-            { return _m_iter_t::_s_root_begin(_node); }
+            _s_root_begin(_m_node_ptr_t _node, ArgsTs&&... _args)
+                _treelib_noexcept_if(_m_iter_t::_s_root_begin(_node, std::forward<ArgsTs>(_args)...))
+            { return _m_iter_t::_s_root_begin(_node, std::forward<ArgsTs>(_args)...); }
 
+            template <typename... ArgsTs>
             static constexpr _m_iter_t
-            _s_header_begin(_m_node_ptr_t _node)
-                _treelib_noexcept_if(_m_iter_t::_s_header_begin(std::declval<_m_node_ptr_t>()))
-            { return _m_iter_t::_s_header_begin(_node); }
+            _s_header_begin(_m_node_ptr_t _node, ArgsTs&&... _args)
+                _treelib_noexcept_if(_m_iter_t::_s_header_begin(_node, std::forward<ArgsTs>(_args)...))
+            { return _m_iter_t::_s_header_begin(_node, std::forward<ArgsTs>(_args)...); }
 
+            template <typename... ArgsTs>
             static constexpr _m_iter_t
-            _s_to_iter(_m_node_ptr_t _node)
-                noexcept(std::is_nothrow_constructible_v<_m_iter_t, _m_node_ptr_t>)
-            { return IterT(_node); }
+            _s_to_iter(ArgsTs&&... _args)
+                noexcept(std::is_nothrow_constructible_v<_m_iter_t, _m_node_ptr_t, ArgsTs...>)
+            { return IterT(_args...); }
 
             static constexpr _m_node_ptr_t 
             _s_to_node(const _m_iter_t& _iter)
@@ -1058,34 +1101,38 @@ namespace tl
      *        should get deduced when constructing these
      *        types from an existing iterator.
      *
-     *        these aliases exist only for the convenience of
+     *        these aliases exist only for the convenience
      *        of not having to prefix the tree-type
      *        when wanting to specify an iterator.
      ***************************************************/
 
-    template <bool IsConst, typename ValueT, typename TraversalT>
+    template <bool IsConst, 
+              typename ValueT, 
+              typename TraversalT,
+              typename QueueAllocT = std::allocator<ValueT>>
     using queued_iterator
-        = _detail::_queued_iterator<IsConst, ValueT, TraversalT>;
+        = _detail::_queued_iterator<IsConst, ValueT, TraversalT, QueueAllocT>;
 
-    template <bool IsConst, typename ValueT, typename NodeT>
+    template <bool IsConst, 
+              typename ValueT, 
+              typename NodeT,
+              typename QueueAllocT = std::allocator<ValueT>>
     using queued_depth_first_iterator
-        = queued_iterator<IsConst, ValueT, _detail::_depth_first_pre_order<false, NodeT>>;
+        = queued_iterator<IsConst, ValueT, _detail::_depth_first_pre_order<false, NodeT>, QueueAllocT>;
 
-    template <bool IsConst, typename ValueT, typename NodeT>
+    template <bool IsConst, 
+              typename ValueT, 
+              typename NodeT,
+              typename QueueAllocT = std::allocator<ValueT>>
     using queued_depth_first_post_order_iterator
-        = queued_iterator<IsConst, ValueT, _detail::_depth_first_post_order<false, NodeT>>;
+        = queued_iterator<IsConst, ValueT, _detail::_depth_first_post_order<false, NodeT>, QueueAllocT>;
 
-    // template <typename NodeT>
-    // using depth_first_queued_iterator 
-    //     = _detail::_depth_first_pre_order_queued_iterator<typename TreeType::node_type>;
-
-    template <bool IsConst, typename ValueT, typename NodeT>
+    template <bool IsConst, 
+              typename ValueT, 
+              typename NodeT,
+              typename QueueAllocT>
     using queued_breadth_first_iterator
-        = queued_iterator<IsConst, ValueT, _detail::_breadth_first<false, NodeT>>;
-
-    // template <typename NodeT>
-    // using breadth_first_queued_iterator 
-    //     = _detail::_breadth_first_in_order_queued_iterator<typename TreeType::node_type>;
+        = queued_iterator<IsConst, ValueT, _detail::_breadth_first<false, NodeT>, QueueAllocT>;
 }
 
 #endif

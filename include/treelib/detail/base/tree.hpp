@@ -5,12 +5,10 @@
 /***************************************************
  * @file   treelib/detail/base/tree.hpp
  * @author Julian Benzel
- * @date   15.09.2026
+ * @date   25.09.2026
  *
  * @brief  base-classes/mixins for common tree-types
  *         operating on the respective node-type.
- *
- * @todo   - maybe make _size_base an optional mixin.
  ***************************************************/
 
 #include <treelib/detail/bits/except.hpp>
@@ -34,7 +32,7 @@ namespace tl
                   typename AllocT>
         class _alloc_base
         {
-        protected:
+        public:
 
             using _m_alloc_t        = AllocT;
             using _m_alloc_traits_t = std::allocator_traits<_m_alloc_t>;
@@ -65,14 +63,15 @@ namespace tl
              *        instance containing an instance of
              *        value_type, constructed from args.
              ***************************************************/
-            template <typename... Args>
+            template <typename... ArgsTs>
             [[nodiscard]]
             constexpr _m_vnode_ptr_t 
-            _m_new_node(Args&&... _args)
+            _m_new_node(ArgsTs&&... _args)
+                requires std::default_initializable<_m_node_t>
             { 
                 _m_vnode_ptr_t _res 
                     = _m_node_alloc_traits_t::allocate(this->_m_node_alloc, 1);
-                _m_node_alloc_traits_t::construct(this->_m_node_alloc, _res, std::forward<Args>(_args)...);
+                _m_node_alloc_traits_t::construct(this->_m_node_alloc, _res, std::forward<ArgsTs>(_args)...);
                 return _res;
             }
 
@@ -82,15 +81,22 @@ namespace tl
              *        value_type, constructed from args.
              *
              *        additionally passes node-allocator to
-             *        the newly created node.
-             * @see   tl::_detail::_dynamic_node for more.
+             *        the newly created node as the first
+             *        constructor-argument.
+             * @see   tl::_detail::_dynamic_tree_node for more.
              ***************************************************/
-            template <typename... Args>
+            template <typename... ArgsTs>
             [[nodiscard]]
             constexpr _m_vnode_ptr_t 
-            _m_new_node(Args&&... _args)
+            _m_new_node(ArgsTs&&... _args)
                 requires _dynamic_tree_node<_m_node_t>
-            { return this->_m_new_node(this->_m_node_alloc, std::forward<Args>(_args)...); }
+            { 
+                _m_vnode_ptr_t _res 
+                    = _m_node_alloc_traits_t::allocate(this->_m_node_alloc, 1);
+                _m_node_alloc_traits_t::construct(this->_m_node_alloc, _res, 
+                    this->_m_node_alloc, std::forward<ArgsTs>(_args)...);
+                return _res;
+            }
 
             /***************************************************
              * @brief destructs and deallocates a node-instance.
@@ -133,7 +139,7 @@ namespace tl
             constexpr
             _alloc_base(const allocator_type& alloc)
                 noexcept(std::is_nothrow_copy_constructible_v<allocator_type>)
-                requires std::copyable<allocator_type>
+                requires std::is_copy_assignable_v<allocator_type>
                 : _m_node_alloc(alloc)
             { }
 
@@ -155,7 +161,6 @@ namespace tl
                 const noexcept
             { return _m_node_alloc_traits_t::max_size(this->_m_node_alloc); }
         };
-
 
         /***************************************************
          * @brief base-class for trees to save their
@@ -185,7 +190,7 @@ namespace tl
             }
 
             /***************************************************
-             * size modifiers.
+             * size-modifiers.
              ***************************************************/
 
             constexpr
@@ -226,7 +231,6 @@ namespace tl
             { return this->_m_node_count == 0; }
         };
 
-
         /***************************************************
          * @brief supplies basic copying/erasure/comparing
          *        methods that recursively operate on nodes.
@@ -252,8 +256,10 @@ namespace tl
             using typename _m_alloc_base_t::_m_node_traits_t;
             using typename _m_alloc_base_t::_m_alloc_t;
             
-            using _m_init_node_t = _initializer_node<_m_value_t>;
-            using _m_init_node_ref_t = const _m_init_node_t&;
+            using _m_init_node_t           = _initializer_node<_m_value_t>;
+            using _m_init_node_base_t      = typename _m_init_node_t::_m_base_t;
+            using _m_init_node_cref_t      = const _m_init_node_t&;
+            using _m_init_node_base_cref_t = const _m_init_node_base_t&;
             using _m_hook_t = typename _m_node_traits_t::_m_hook_t;
 
             /***************************************************
@@ -284,13 +290,16 @@ namespace tl
              * @brief helper function to construct and hook
              *        a new node from the value of an
              *        initializer-node.
+             *        used in the corresponding constructors
+             *        of '_root_base' and '_header_base'
              ***************************************************/
             constexpr void 
             _m_insert_init(_m_hook_t _at,
                            _m_node_ptr_t _where, 
-                           _m_init_node_ref_t _src)
+                           _m_init_node_base_cref_t _src)
             {
-                _m_node_ptr_t _new_node = this->_m_new_node(_src._m_value);
+                _m_node_ptr_t _new_node 
+                    = this->_m_new_node(static_cast<_m_init_node_cref_t>(_src)._m_value());
                 _m_node_traits_t::_s_hook_at(_where, _at, _new_node);
                 this->_m_inc_size();
             }
@@ -298,14 +307,15 @@ namespace tl
             /***************************************************
              * @brief helper function to construct and hook
              *        a new node from the value of an existing
-             *        node. used in _m_copy_children.
+             *        node. used in '_m_copy_children'.
              ***************************************************/
             constexpr void 
             _m_insert_copy(_m_hook_t _at,
-                            _m_node_ptr_t _where, 
-                            _m_cnode_ptr_t _src)
+                           _m_node_ptr_t _where, 
+                           _m_cnode_ptr_t _src)
             {
-                _m_node_ptr_t _new_node = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(_src)->_m_value());
+                _m_node_ptr_t _new_node 
+                    = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(_src)->_m_value());
                 _m_node_traits_t::_s_hook_at(_where, _at, _new_node);
                 this->_m_inc_size();
             }
@@ -317,8 +327,8 @@ namespace tl
              * @note  _dest itself is not copied and can 
              *        therefore be a valueless header-node.
              *        all children must be static_cast-able to
-             *        _m_vnode_ptr_t. the destination-node will
-             *        have to satisfy _copyable_node because it
+             *        _m_vnode_ptr_t. the destination-node
+             *        has to satisfy _copyable_node because it
              *        needs to provide .mimic() to build the
              *        copied structure.
              ***************************************************/
@@ -332,6 +342,28 @@ namespace tl
                                       _m_cnode_ptr_t _src) 
                                   { this->_m_insert_copy(_at, _where, _src); };
                 _m_node_traits_t::_s_mimic(_dest, _src, _insert_fn);
+            }
+
+            /***************************************************
+             * @brief recursively inserts new child-nodes
+             *        to the passed node and mimics the structure
+             *        of the initializer-node.
+             * @note  _dest itself is not inserted and can 
+             *        therefore be a valueless header-node. 
+             *        the destination-node has to satisfy 
+             *        _initializable_node because it
+             *        needs to provide .mimic_initializer() 
+             *        to build the tree from the init-node.
+             ***************************************************/
+            constexpr void
+            _m_init_children(_m_node_ptr_t _dest, _m_init_node_base_cref_t _init)
+            {
+                // capture this-pointer to insert into this tree
+                auto _insert_fn = [&](_m_hook_t _at,
+                                      _m_node_ptr_t _where,
+                                      _m_init_node_base_cref_t _init)
+                                  { this->_m_insert_init(_at, _where, _init); };
+                _m_node_traits_t::_s_mimic_initializer(_dest, _init, _insert_fn);
             }
 
             static constexpr bool 
@@ -378,7 +410,6 @@ namespace tl
             using _m_alloc_base_t::_m_alloc_base_t;
         };
 
-
         /***************************************************
          * @brief base-class for trees which should
          *        originate from a single value-holding
@@ -411,7 +442,7 @@ namespace tl
             using _m_init_tree_t = _root_initializer_tree<_m_value_t>;
             using typename _m_base_t::_m_hook_t;
             using typename _m_base_t::_m_init_node_t;
-            using typename _m_base_t::_m_init_node_ref_t;
+            using typename _m_base_t::_m_init_node_base_t;
 
             _m_node_ptr_t _m_root;
 
@@ -428,11 +459,11 @@ namespace tl
                 const noexcept
             { return this->_m_root; }
 
-            template <typename IterT>
+            template <typename IterT, typename... ArgsTs>
             constexpr IterT
-            _m_begin()
+            _m_begin(ArgsTs&&... _args)
                 const
-            { return _iter_traits<IterT>::_s_root_begin(this->_m_root_node()); }
+            { return _iter_traits<IterT>::_s_root_begin(this->_m_root_node(), std::forward<ArgsTs>(_args)...); }
             
         public:
 
@@ -478,17 +509,12 @@ namespace tl
              *        construct from an initializer-tree.
              ***************************************************/
             constexpr
-            _root_base(initializer_tree_type&& init,
+            _root_base(initializer_tree_type init,
                        const allocator_type& alloc = allocator_type())
-                requires _initializable_node<_m_node_t, _m_init_node_t>
+                requires _initializer_compatible<_m_node_t, _m_init_node_base_t>
+                : _root_base(init._m_root._m_value(), alloc)
             {
-                // capture this-pointer to insert into this tree
-                auto _insert_fn = [&](_m_hook_t _at,
-                                      _m_node_ptr_t _where, 
-                                      _m_init_node_ref_t _src) 
-                                  { this->_m_insert_init(_at, _where, _src); };
-                this->emplace_root(init._m_root._m_value);
-                this->_m_root_node()->_m_mimic_initializer(init._m_root, _insert_fn);
+                this->_m_init_children(this->_m_root, init._m_root);
             }
 
             /***************************************************
@@ -597,7 +623,6 @@ namespace tl
             }
         };
 
-
         /***************************************************
          * @brief base-class for trees which should
          *        originate from a valueless-header-node.
@@ -629,6 +654,10 @@ namespace tl
             using typename _m_base_t::_m_alloc_t;
 
             using _m_header_t = _m_node_t;
+            using _m_init_tree_t = _header_initializer_tree<_m_value_t>;
+            using typename _m_base_t::_m_hook_t;
+            using typename _m_base_t::_m_init_node_t;
+            using typename _m_base_t::_m_init_node_base_t;
 
             _m_header_t _m_header;
 
@@ -650,20 +679,50 @@ namespace tl
                 return const_cast<_m_node_ptr_t>(std::addressof(this->_m_header)); 
             }
         
-            template <typename IterT>
+            template <typename IterT, typename... ArgsTs>
             constexpr IterT
-            _m_begin()
+            _m_begin(ArgsTs&&... _args)
                 const
-            { return _iter_traits<IterT>::_s_header_begin(this->_m_root_node()); }
+            { return _iter_traits<IterT>::_s_header_begin(this->_m_root_node(), std::forward<ArgsTs>(_args)...); }
 
         public:
 
-            using _m_base_t::_m_base_t;
+            using initializer_tree_type = _m_init_tree_t;
+            using typename _m_base_t::allocator_type;
 
             constexpr
             _header_base()
-                : _m_header()
+                requires std::default_initializable<_m_node_t>
+                : _m_base_t()
+                , _m_header()
             { }
+
+            constexpr
+            _header_base()
+                requires _dynamic_tree_node<_m_node_t>
+                : _m_base_t()
+                , _m_header(this->_m_node_alloc)
+            { }
+
+            constexpr
+            _header_base(const allocator_type& alloc)
+                requires _dynamic_tree_node<_m_node_t>
+                : _m_base_t(alloc)
+                , _m_header(this->_m_node_alloc)
+            { }
+
+            /***************************************************
+             * @brief constructor (3).
+             *        construct from an initializer-tree.
+             ***************************************************/
+            constexpr
+            _header_base(initializer_tree_type init,
+                         const allocator_type& alloc = allocator_type())
+                requires _initializer_compatible<_m_node_t, _m_init_node_base_t>
+                : _header_base(alloc)
+            {
+                this->_m_init_children(std::addressof(this->_m_header), init._m_header);
+            }
 
             /***************************************************
              * @brief copy-constructor and assignment-operator.
@@ -740,7 +799,6 @@ namespace tl
             { return _m_base_t::_s_compare_children(a._m_root_node(), b._m_root_node()); }
         };
 
-
         /*************************************************************
          * @brief template-mixin for trees where the node-type
          *        does not hold a back-reference to
@@ -779,19 +837,20 @@ namespace tl
         public:
 
             using typename _m_base_t::allocator_type;
-            using size_type = _m_size_t;
             using typename _m_base_t::value_type;
 
             static constexpr traversal
                 default_traversal = traversal::depth_first;
 
-            template <traversal Trav>
+            template <traversal Trav, 
+                      typename QueueAllocator = allocator_type>
             using queued_iterator       
-                = _queued_iterator<false, _m_value_t, _m_to_trav_t<Trav>>;
+                = _queued_iterator<false, _m_value_t, _m_to_trav_t<Trav>, QueueAllocator>;
 
-            template <traversal Trav>
+            template <traversal Trav, 
+                      typename QueueAllocator = allocator_type>
             using const_queued_iterator 
-                = _queued_iterator<true, _m_value_t, _m_to_trav_t<Trav>>;
+                = _queued_iterator<true, _m_value_t, _m_to_trav_t<Trav>, QueueAllocator>;
 
             // using leaf_iterator       = _leaf_iterator<_m_value_t, _m_node_t>;
             
@@ -801,7 +860,7 @@ namespace tl
 
             using iterator       = queued_iterator<default_traversal>;
             using const_iterator = const_queued_iterator<default_traversal>;
-            using hook_type      = _m_node_t::_m_hook_t;
+            using hook_type      = _m_hook_t;
 
             /***************************************************
              * constructors / special-member-functions.
@@ -818,51 +877,160 @@ namespace tl
             { this->clear(); }
 
             /***************************************************
-             * iterators.
+             * queued-iterators.
              ***************************************************/
 
+            /******************************************************************
+             * @tparam Trav           the traversal-strategy
+             * @tparam QueueAllocator the allocator-type used for
+             *                        the node-queue. defaults to
+             *                        the tree's allocator-type.  
+             * 
+             * @param  alloc the allocator used for the node-queue.
+             *               default-constructs by default.
+             *
+             * @returns a queued_iterator to the tree's root-node.
+             ******************************************************************/
+            template <traversal Trav,
+                      typename QueueAllocator = allocator_type>
+            constexpr queued_iterator<Trav, QueueAllocator> 
+            qroot(const QueueAllocator& alloc = QueueAllocator())
+            { 
+                using _iter_t = queued_iterator<Trav, QueueAllocator>;
+                return _iter_traits<_iter_t>::_s_to_iter(this->_m_root_node(), alloc); 
+            }
+
+            /******************************************************************
+             * @tparam Trav           the traversal-strategy
+             * @tparam QueueAllocator the allocator-type used for
+             *                        the node-queue. defaults to
+             *                        the tree's allocator-type.  
+             * 
+             * @param  alloc the allocator used for the node-queue.
+             *               default-constructs by default.
+             *
+             * @returns a const_queued_iterator to the tree's root-node.
+             ******************************************************************/
+            template <traversal Trav,
+                      typename QueueAllocator = allocator_type>
+            constexpr const_queued_iterator<Trav, QueueAllocator>  
+            cqroot(const QueueAllocator& alloc = QueueAllocator())
+                const
+            { 
+                using _iter_t = const_queued_iterator<Trav, QueueAllocator>;
+                return _iter_traits<_iter_t>::_s_to_iter(this->_m_root_node(), alloc); 
+            }
+
+            /******************************************************************
+             * @tparam Trav           the traversal-strategy
+             * @tparam QueueAllocator the allocator-type used for
+             *                        the node-queue. defaults to
+             *                        the tree's allocator-type.  
+             * 
+             * @param  alloc the allocator used for the node-queue.
+             *               default-constructs by default.
+             *
+             * @returns a queued_iterator to the beginning.
+             ******************************************************************/
+            template <traversal Trav,
+                      typename QueueAllocator = allocator_type>
+            constexpr queued_iterator<Trav, QueueAllocator>
+            qbegin(const QueueAllocator& alloc = QueueAllocator())
+            { 
+                using _iter_t = queued_iterator<Trav, QueueAllocator>;
+                return this->template _m_begin<_iter_t>(alloc); 
+            }
+
+            /******************************************************************
+             * @tparam Trav           the traversal-strategy
+             * @tparam QueueAllocator the allocator-type used for
+             *                        the node-queue. defaults to
+             *                        the tree's allocator-type.  
+             * 
+             * @param  alloc the allocator used for the node-queue.
+             *               default-constructs by default.
+             *
+             * @returns a const_queued_iterator to the beginning.
+             ******************************************************************/
+            template <traversal Trav,
+                      typename QueueAllocator = allocator_type>
+            constexpr const_queued_iterator<Trav, QueueAllocator>
+            cqbegin(const QueueAllocator& alloc = QueueAllocator())
+                const
+            { 
+                using _iter_t = const_queued_iterator<Trav, QueueAllocator>;
+                return this->template _m_begin<_iter_t>(alloc); 
+            }
+
+            /******************************************************************
+             * @tparam Trav           the traversal-strategy
+             * @tparam QueueAllocator the allocator-type used for
+             *                        the node-queue. defaults to
+             *                        the tree's allocator-type.  
+             * 
+             * @param  alloc the allocator used for the node-queue.
+             *               default-constructs by default.
+             *
+             * @returns a queued_iterator to the end.
+             ******************************************************************/
+            template <traversal Trav,
+                      typename QueueAllocator = allocator_type>
+            constexpr queued_iterator<Trav, QueueAllocator>
+            qend(const QueueAllocator& alloc = QueueAllocator())
+            { 
+                using _iter_t = queued_iterator<Trav, QueueAllocator>;
+                return _iter_traits<_iter_t>::_s_to_iter(alloc); 
+            }
+
+            /******************************************************************
+             * @tparam Trav           the traversal-strategy
+             * @tparam QueueAllocator the allocator-type used for
+             *                        the node-queue. defaults to
+             *                        the tree's allocator-type.  
+             * 
+             * @param  alloc the allocator used for the node-queue.
+             *               default-constructs by default.
+             *
+             * @returns a const_queued_iterator to the end.
+             ******************************************************************/
+            template <traversal Trav,
+                      typename QueueAllocator = allocator_type>
+            constexpr const_queued_iterator<Trav, QueueAllocator>
+            cqend(const QueueAllocator& alloc = QueueAllocator())
+                const
+            { 
+                using _iter_t = const_queued_iterator<Trav, QueueAllocator>;
+                return _iter_traits<_iter_t>::_s_to_iter(alloc); 
+            }
+
             /***************************************************
-             * @returns an iterator to the root-node of the tree.
+             * default-iterators.
              ***************************************************/
+
+            /********************************************************
+             * @returns an iterator to the tree's root-node.
+             ********************************************************/
             constexpr iterator 
             root()
-            { return _iter_traits<iterator>::_s_to_iter(this->_m_root_node()); }
+            { return this->template qroot<default_traversal>(); }
 
-            /***************************************************
-             * @returns an iterator to the root-node of the tree.
-             ***************************************************/
+            /********************************************************
+             * @returns an iterator to the tree's root-node.
+             ********************************************************/
             constexpr const_iterator 
             croot()
                 const
-            { return _iter_traits<const_iterator>::_s_to_iter(this->_m_root_node()); }
+            { return this->template cqroot<default_traversal>(); }
 
             /***************************************************
-             * @returns a queued iterator to the beginning, 
-             *          using the specified traversal-type.
-             ***************************************************/
-
-            template <traversal Trav>
-            constexpr queued_iterator<Trav>
-            qbegin()
-            { return this->template _m_begin<queued_iterator<Trav>>(); }
-
-            template <traversal Trav>
-            constexpr const_queued_iterator<Trav>
-            cqbegin()
-                const
-            { return this->template _m_begin<const_queued_iterator<Trav>>(); }
-
-            /***************************************************
-             * @returns an iterator to the beginning, using
-             *          the default-traversal and iterator-type.
+             * @returns an iterator to the beginning.
              ***************************************************/
             constexpr iterator 
             begin() 
             { return this->template qbegin<default_traversal>(); }
 
             /***************************************************
-             * @returns an iterator to the beginning, using
-             *          the default-traversal and iterator-type.
+             * @returns an iterator to the beginning.
              ***************************************************/
             constexpr const_iterator
             cbegin()
@@ -874,45 +1042,28 @@ namespace tl
              ***************************************************/
             constexpr iterator 
             end()
-                noexcept
-            { return _iter_traits<iterator>::_s_to_iter(nullptr); }
+            { return this->template qend<default_traversal>(); }
 
             /***************************************************
              * @returns an iterator to the end.
              ***************************************************/
             constexpr const_iterator
             cend()
-                const noexcept
-            { return _iter_traits<const_iterator>::_s_to_iter(nullptr); }
-
-            /***************************************************
-             * @returns an iterator to the end.
-             ***************************************************/
-            template <traversal Trav>
-            constexpr queued_iterator<Trav>
-            qend()
-                noexcept
-            { return _iter_traits<queued_iterator<Trav>>::_s_to_iter(nullptr); }
-
-            /***************************************************
-             * @returns an iterator to the end.
-             ***************************************************/
-            template <traversal Trav>
-            constexpr const_queued_iterator<Trav>
-            cqend()
-                const noexcept
-            { return _iter_traits<const_queued_iterator<Trav>>::_s_to_iter(nullptr); }
+                const
+            { return this->template cqend<default_traversal>(); }
 
             /***************************************************
              * modifiers.
              ***************************************************/
 
-            /***************************************************
+            /********************************************************
              * @brief construct a node in-place, as a relative 
              *        of an existing node.
-             * @param as : the 'position' of the new node.
-             *             @see tl::node for more information.
-             ***************************************************/
+             * @param as    the 'position' of the new node.
+             *              @see 'hook_type' for more information.
+             * @param where 
+             * @param args  constructor-arguments for the value.
+             ********************************************************/
             template <typename... Args>
             constexpr iterator
             emplace(hook_type as, const_iterator where, Args&&... args)
@@ -933,9 +1084,7 @@ namespace tl
              ***************************************************/
             constexpr iterator
             insert(hook_type as, const_iterator where, const value_type& value)
-            {
-                return this->emplace(as, where, value);
-            }
+            { return this->emplace(as, where, value); }
 
             /***************************************************
              * @brief move a tree (or parts of it) 
@@ -979,7 +1128,6 @@ namespace tl
             }
         };
 
-
         template <typename BaseT>
         struct _tree_mixin
             : public _outward_tree_mixin<BaseT>
@@ -1006,58 +1154,105 @@ namespace tl
 
             using typename _m_base_t::hook_type;
 
-            using iterator = traversing_iterator<default_traversal>;
-            using const_iterator = traversing_iterator<default_traversal>;
+            using iterator       = traversing_iterator<default_traversal>;
+            using const_iterator = const_traversing_iterator<default_traversal>;
             
             /***************************************************
-             * additional iterators.
+             * traversing-iterators.
              ***************************************************/
 
-            /***************************************************
-             * @returns a traversing iterator to the beginning, 
-             *          using the specified traversal-type.
-             ***************************************************/
+            /******************************************************************
+             * @tparam  Trav the traversal-strategy 
+             * @returns a traversing_iterator to the tree's root-node.
+             ******************************************************************/
+            template <traversal Trav>
+            constexpr traversing_iterator<Trav>
+            troot()
+            { 
+                using _iter_t = traversing_iterator<Trav>;
+                return _iter_traits<_iter_t>::_s_to_iter(this->_m_root_node()); 
+            }
 
+            /******************************************************************
+             * @tparam  Trav the traversal-strategy 
+             * @returns a const_traversing_iterator to the tree's root-node.
+             ******************************************************************/
+            template <traversal Trav>
+            constexpr const_traversing_iterator<Trav>
+            ctroot()
+                const
+            { 
+                using _iter_t = traversing_iterator<Trav>;
+                return _iter_traits<_iter_t>::_s_to_iter(this->_m_root_node()); 
+            }
+
+            /********************************************************
+             * @tparam  Trav the traversal-strategy 
+             * @returns a traversing_iterator to the beginning.
+             ********************************************************/
             template <traversal Trav>
             constexpr traversing_iterator<Trav>
             tbegin()
             { return this->template _m_begin<traversing_iterator<Trav>>(); }
 
+            /********************************************************
+             * @tparam  Trav the traversal-strategy 
+             * @returns a const_traversing_iterator to the beginning.
+             ********************************************************/
             template <traversal Trav>
-            constexpr traversing_iterator<Trav>
+            constexpr const_traversing_iterator<Trav>
             ctbegin()
                 const
             { return this->template _m_begin<const_traversing_iterator<Trav>>(); }
 
-            /***************************************************
-             * @returns an iterator to the end.
-             ***************************************************/
+            /********************************************************
+             * @tparam  Trav the traversal-strategy 
+             * @returns a traversing_iterator to the end.
+             ********************************************************/
             template <traversal Trav>
             constexpr traversing_iterator<Trav>
             tend()
                 noexcept
-            { return _iter_traits<traversing_iterator<Trav>>::_s_to_iter(nullptr); }
+            { return _iter_traits<traversing_iterator<Trav>>::_s_to_iter(); }
 
-            /***************************************************
-             * @returns an iterator to the end.
-             ***************************************************/
+            /********************************************************
+             * @tparam  Trav the traversal-strategy 
+             * @returns a const_traversing_iterator to the end.
+             ********************************************************/
             template <traversal Trav>
             constexpr const_traversing_iterator<Trav>
             ctend()
                 const noexcept
-            { return _iter_traits<const_traversing_iterator<Trav>>::_s_to_iter(nullptr); }
+            { return _iter_traits<const_traversing_iterator<Trav>>::_s_to_iter(); }
 
             /***************************************************
-             * @returns an iterator to the beginning, using
-             *          the default-traversal and iterator-type.
+             * default-iterators.
+             ***************************************************/
+
+            /********************************************************
+             * @returns an iterator to the tree's root-node.
+             ********************************************************/
+            constexpr iterator 
+            root()
+            { return this->template troot<default_traversal>(); }
+
+            /********************************************************
+             * @returns an iterator to the tree's root-node.
+             ********************************************************/
+            constexpr const_iterator 
+            croot()
+                const
+            { return this->template ctroot<default_traversal>(); }
+
+            /***************************************************
+             * @returns an iterator to the beginning.
              ***************************************************/
             constexpr iterator 
             begin() 
             { return this->template tbegin<default_traversal>(); }
 
             /***************************************************
-             * @returns an iterator to the beginning, using
-             *          the default-traversal and iterator-type.
+             * @returns an iterator to the beginning.
              ***************************************************/
             constexpr const_iterator
             cbegin()
@@ -1069,16 +1264,15 @@ namespace tl
              ***************************************************/
             constexpr iterator 
             end()
-                noexcept
-            { return _iter_traits<iterator>::_s_to_iter(nullptr); }
+            { return this->template tend<default_traversal>(); }
 
             /***************************************************
              * @returns an iterator to the end.
              ***************************************************/
             constexpr const_iterator
             cend()
-                const noexcept
-            { return _iter_traits<const_iterator>::_s_to_iter(nullptr); }
+                const
+            { return this->template ctend<default_traversal>(); }
 
             /***************************************************
              * additional modifiers.
@@ -1104,7 +1298,6 @@ namespace tl
 
             }
         };
-
 
         /***************************************************
          * @brief type-aliases for base/mixin combinations.

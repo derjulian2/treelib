@@ -40,6 +40,7 @@
   ***********************************************************************/
 
 #include <treelib/detail/bits/except.hpp>
+#include <treelib/detail/bits/initializer_tree.hpp>
 
 #include <type_traits>
 #include <utility>
@@ -72,8 +73,7 @@ namespace tl
          ******************************************************************/
         template <typename T>
         concept _dynamic_tree_node
-            = std::constructible_from<const typename T::_m_alloc_t&>;
-
+            = std::constructible_from<T, const typename T::_m_alloc_t&>;
 
         /***************************************************
          * @brief   requirements of a node-type to
@@ -111,7 +111,6 @@ namespace tl
                  ***************************************************/
                 { t->_m_mimic(ct, [](typename T::_m_hook_t _at, T* _parent, const T* _src) -> void { }) };
             };
-
 
         /*********************************************************************************
          * @brief   requirements of a node-type to
@@ -192,7 +191,6 @@ namespace tl
                     -> std::ranges::range;
             };
 
-    
         /********************************************************
          * @brief requirements for a bidirectional node-type,
          *        i.e. a node-type with a back-reference to
@@ -237,7 +235,6 @@ namespace tl
                 { t->_m_unhook() };
             };
 
-
         /***************************************************
          * @brief mixin that adds an instance
          *        of value-type to the passed node-type.
@@ -271,12 +268,13 @@ namespace tl
              *        forward all args to value-type.
              ***************************************************/
 
-            template <typename... Args>
+            template <typename... ArgsTs>
             constexpr
-            _value_node(Args&&... _args)
-                noexcept(std::is_nothrow_constructible_v<_m_value_t, Args...>)
+            _value_node(ArgsTs&&... _args)
+                noexcept(std::is_nothrow_constructible_v<_m_value_t, ArgsTs...>)
+                requires std::default_initializable<_m_node_t>
                 : _m_node_t()
-                , _m_data(std::forward<Args>(_args)...)
+                , _m_data(std::forward<ArgsTs>(_args)...)
             { }
 
             /***************************************************
@@ -284,15 +282,16 @@ namespace tl
              *        dynamic-node constructor. 
              ***************************************************/
 
-            template <typename... Args>
+            template <typename... ArgsTs>
             constexpr
-            _value_node(const _m_node_t::_m_alloc_t& _alloc, 
-                        Args&&... _args)
-                noexcept(std::is_nothrow_constructible_v<_m_value_t, Args...>
+            _value_node(const auto& _alloc, 
+                        ArgsTs&&... _args)
+                noexcept(std::is_nothrow_constructible_v<_m_value_t, ArgsTs...>
                          && std::is_nothrow_constructible_v<_m_node_t, const typename _m_node_t::_m_alloc_t&>)
-                requires _dynamic_tree_node<_m_node_t>
+                requires (_dynamic_tree_node<_m_node_t>
+                          && std::convertible_to<decltype(_alloc), typename _m_node_t::_m_alloc_t>)
                 : _m_node_t(_alloc)
-                , _m_data(std::forward<Args>(_args)...)
+                , _m_data(std::forward<ArgsTs>(_args)...)
             { }
 
             /***************************************************
@@ -311,7 +310,6 @@ namespace tl
                 const noexcept
             { return this->_m_data; }
         };
-
 
         /***************************************************
          * @brief CRTP-mixin that extends the
@@ -359,10 +357,11 @@ namespace tl
              * this CRTP-base should not be instantiated
              * on it's own.
              ***************************************************/
+            template <typename... ArgsTs>
             constexpr
-            _bidirectional_node()
-                _treelib_noexcept_if(_m_base_t())
-                : _m_base_t()
+            _bidirectional_node(ArgsTs&&... _args)
+                noexcept(std::is_nothrow_constructible_v<_m_base_t>)
+                : _m_base_t(std::forward<ArgsTs>(_args)...)
                 , _m_parent_node(nullptr)
             { }
 
@@ -402,7 +401,7 @@ namespace tl
 
             constexpr void
             _m_unhook_if(_m_node_ptr_t _node)
-                _treelib_noexcept_if(this->_m_base_t::unhook_if(_node))
+                _treelib_noexcept_if(this->_m_base_t::_m_unhook_if(_node))
             {
                 this->_m_base_t::unhook_if(_node);
                 _node->_m_parent_node = nullptr;
@@ -417,14 +416,13 @@ namespace tl
              ***************************************************/
             constexpr void
             _m_unhook()
-                _treelib_noexcept_if(this->_m_parent_node->_m_base_t::_m_unhook_if(this))
+                _treelib_noexcept_if(this->_m_parent_node->_m_base_t::_m_unhook_if(this->_m_node_ptr()))
             {
-                this->_m_parent_node->_m_base_t::_m_unhook_if(this);
+                this->_m_parent_node->_m_base_t::_m_unhook_if(this->_m_node_ptr());
                 this->_m_parent_node = nullptr;
             }
         };
         
-
         /********************************************************
          * @brief CRTP-mixin that extends the
          *        passed node-base-type by a member-variable
@@ -457,10 +455,11 @@ namespace tl
              * this CRTP-base should not be instantiated
              * on it's own.
              ***************************************************/
+            template <typename... ArgsTs>
             constexpr
-            _depth_node()
+            _depth_node(ArgsTs&&... _args)
                 _treelib_noexcept_if(_m_base_t())
-                : _m_base_t()
+                : _m_base_t(std::forward<ArgsTs>(_args)...)
                 , _m_node_depth(0)
             { }
 
@@ -502,7 +501,6 @@ namespace tl
             }
         };
 
-
         /********************************************************
          * @brief CRTP-mixin that extends the
          *        passed node-base-type by a member-variable
@@ -537,10 +535,11 @@ namespace tl
              * this CRTP-base should not be instantiated
              * on it's own.
              ***************************************************/
+            template <typename... ArgsTs>
             constexpr
-            _height_node()
+            _height_node(ArgsTs&&... _args)
                 _treelib_noexcept_if(_m_base_t())
-                : _m_base_t()
+                : _m_base_t(std::forward<ArgsTs>(_args)...)
                 , _m_node_height(0)
             { }
 
@@ -609,13 +608,11 @@ namespace tl
             }
         };
 
-
         /***************************************************
          * @brief additional functionality and unified
          *        interface for tree-node-types.
          ***************************************************/
         template <typename NodeT>
-            requires _tree_node<NodeT>
         struct _node_traits
         {
             using _m_node_t = NodeT;
@@ -624,7 +621,9 @@ namespace tl
             using _m_ref_t  = _m_node_t&;
             using _m_cref_t = const _m_node_t&;
 
-            using _m_hook_t  = _m_node_t::_m_hook_t;
+            using _m_hook_t   = _m_node_t::_m_hook_t;
+            using _m_depth_t  = std::size_t;
+            using _m_height_t = std::size_t;
 
             template <typename ValueT>
             using _m_vnode_t      = _value_node<_m_node_t, ValueT>;
@@ -673,8 +672,7 @@ namespace tl
                                              std::ranges::cend(_children)); 
             }
 
-            static constexpr 
-            typename _m_node_t::_m_height_t
+            static constexpr _m_height_t
             _s_height(_m_cptr_t _node)
         #ifdef _treelib_store_height
                 _treelib_noexcept_if(_node->_m_height())
@@ -683,7 +681,7 @@ namespace tl
                 _treelib_noexcept_if(_s_children(_node))
                 requires _bidirectional_tree_node<_m_node_t>
             {
-                typename _m_node_t::_m_height_t _res {0};
+                _m_height_t _res {0};
                 for (_m_cptr_t _child
                      : _s_children(_node))
                     _res = std::max(_s_height(_child) + 1, _res);
@@ -691,8 +689,7 @@ namespace tl
             }
         #endif
 
-            static constexpr 
-            typename _m_node_t::_m_depth_t
+            static constexpr _m_depth_t
             _s_depth(_m_cptr_t _node)
         #ifdef _treelib_store_depth
                 _treelib_noexcept_if(_node->_m_depth())
@@ -701,7 +698,7 @@ namespace tl
                 _treelib_noexcept_if(_node->_m_parent())
                 requires _bidirectional_tree_node<_m_node_t>
             {
-                typename _m_node_t::_m_depth_t _res {0};
+                _m_depth_t _res {0};
                 while ((_node = _node->_m_parent()))
                     ++_res;
                 return _res;
@@ -899,19 +896,19 @@ namespace tl
              *        or initializer-nodes.
              ***************************************************/
 
-            template <typename Fn>
-                requires std::invocable<Fn, _m_hook_t, _m_ptr_t, _m_cptr_t>
-            static constexpr void
-            _s_mimic(_m_ptr_t _node, _m_cptr_t _src, Fn&& _insert_fn)
+            template <typename FnT>
                 requires _copyable_tree_node<_m_node_t>
-            { _node->_m_mimic(_src, std::forward<Fn>(_insert_fn)); }
+                         && std::invocable<FnT, _m_hook_t, _m_ptr_t, _m_cptr_t>
+            static constexpr void
+            _s_mimic(_m_ptr_t _node, _m_cptr_t _src, FnT&& _insert_fn)
+            { _node->_m_mimic(_src, std::forward<FnT>(_insert_fn)); }
 
-            template <typename Fn>
-                requires std::invocable<Fn, _m_hook_t, _m_ptr_t, _m_cptr_t>
+            template <typename InitT, typename FnT>
+                requires _initializer_compatible<_m_node_t, InitT>
+                         && std::invocable<FnT, _m_hook_t, _m_ptr_t, const InitT&>
             static constexpr void
-            _s_mimic_initializer(_m_ptr_t _node, _m_cptr_t _src, Fn&& _insert_fn)
-                requires _copyable_tree_node<_m_node_t>
-            { _node->_m_mimic(_src, std::forward<Fn>(_insert_fn)); }
+            _s_mimic_initializer(_m_ptr_t _node, const InitT& _init, FnT&& _insert_fn)
+            { _node->_m_mimic_initializer(_init, std::forward<FnT>(_insert_fn)); }
 
         };
     }

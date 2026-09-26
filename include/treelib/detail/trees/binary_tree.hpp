@@ -8,7 +8,7 @@
  * @date   04.09.2026
  *
  * @brief  type-generic binary-tree, implemented
- *         as a special-case for a k-tree with
+ *         as a special-case of a k-tree with
  *         the parameter k = 2.
  ***************************************************/
 
