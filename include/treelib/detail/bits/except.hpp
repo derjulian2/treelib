@@ -114,6 +114,9 @@ _treelib_expand0(_treelib_expand0(_treelib_expand0(_treelib_expand0(__VA_ARGS__)
 #define _treelib_has_member(_typename, _methodname, ...) \
 (requires (_typename t) { t._methodname(_treelib_declval_list(__VA_ARGS__)); })
 
+#define _treelib_has_member_type(_typename, _membername) \
+(requires () { typename _typename::_membername; })
+
 namespace tl
 {
     namespace _detail

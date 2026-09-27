@@ -6,6 +6,8 @@
 #include <string>
 #include <cassert>
 
+#include <forward_list>
+
 namespace tl
 {
     /***************************************************
@@ -24,7 +26,7 @@ namespace tl
         using tree_type = outward_binary_tree<int>;
 
         /***************************************************
-         * @brief initializer-tests.
+         * initializer-tests.
          ***************************************************/
 
         using namespace initializers;
@@ -50,11 +52,12 @@ namespace tl
         std::println("{} :: initializer-tests passed", __FUNCTION__);
 
         /***************************************************
-         * @brief traversal-tests.
+         * traversal-tests.
          ***************************************************/
 
         std::vector pre_order     { 1, 2, 3, 4, 5, 6, 7 };
         std::vector post_order    { 3, 4, 2, 6, 7, 5, 1 };
+        std::vector in_order      { 3, 2, 4, 1, 6, 5, 7 };
         std::vector breadth_first { 1, 2, 5, 3, 4, 6, 7 };
 
         assert(std::ranges::equal(my_tree.cbegin(), 
@@ -67,6 +70,11 @@ namespace tl
                                   post_order.cbegin(), 
                                   post_order.cend()));
 
+        assert(std::ranges::equal(my_tree.cqbegin<traversal::depth_first_in_order>(), 
+                                  my_tree.cqend<traversal::depth_first_in_order>(), 
+                                  in_order.cbegin(), 
+                                  in_order.cend()));
+
         assert(std::ranges::equal(my_tree.cqbegin<traversal::breadth_first>(), 
                                   my_tree.cqend<traversal::breadth_first>(), 
                                   breadth_first.cbegin(), 
@@ -75,13 +83,13 @@ namespace tl
         std::println("{} :: traversal-tests passed", __FUNCTION__);
 
         /***************************************************
-         * @brief modifier-tests.
+         * modifier-tests.
          ***************************************************/
 
         std::println("{} :: modifier-tests passed", __FUNCTION__);
 
         /***************************************************
-         * @brief constructor/assignment-operator-tests.
+         * constructor/assignment-operator-tests.
          ***************************************************/
 
         tree_type my_tree_copy(my_tree);
@@ -95,7 +103,7 @@ namespace tl
         std::println("{} :: constructor/assignment-operator passed", __FUNCTION__);
 
         /***************************************************
-         * @brief information-tests.
+         * information-tests.
          ***************************************************/
 
         // assert(my_tree_copy == my_tree);
@@ -119,7 +127,7 @@ namespace tl
         using tree_type = binary_tree<int>;
     
         /***************************************************
-         * @brief initializer-tests.
+         * initializer-tests.
          ***************************************************/
 
         using namespace initializers;
@@ -145,7 +153,7 @@ namespace tl
         std::println("{} :: initializer-tests passed", __FUNCTION__);
 
         /***************************************************
-         * @brief traversal-tests.
+         * traversal-tests.
          ***************************************************/
 
         std::vector pre_order     { 1, 2, 3, 4, 5, 6, 7 };
@@ -157,8 +165,8 @@ namespace tl
                                   pre_order.cbegin(), 
                                   pre_order.cend()));
 
-        assert(std::ranges::equal(my_tree.cqbegin<traversal::depth_first_post_order>(), 
-                                  my_tree.cqend<traversal::depth_first_post_order>(), 
+        assert(std::ranges::equal(my_tree.ctbegin<traversal::depth_first_post_order>(), 
+                                  my_tree.ctend<traversal::depth_first_post_order>(), 
                                   post_order.cbegin(), 
                                   post_order.cend()));
 
@@ -170,13 +178,13 @@ namespace tl
         std::println("{} :: traversal-tests passed", __FUNCTION__);
 
         /***************************************************
-         * @brief modifier-tests.
+         * modifier-tests.
          ***************************************************/
 
         std::println("{} :: modifier-tests passed", __FUNCTION__);
 
         /***************************************************
-         * @brief constructor/assignment-operator-tests.
+         * constructor/assignment-operator-tests.
          ***************************************************/
 
         tree_type my_tree_copy(my_tree);
@@ -190,7 +198,7 @@ namespace tl
         std::println("{} :: constructor/assignment-operator passed", __FUNCTION__);
 
         /***************************************************
-         * @brief information-tests.
+         * information-tests.
          ***************************************************/
 
         // assert(my_tree_copy == my_tree);
@@ -248,7 +256,7 @@ namespace tl
         );
 
         /***************************************************
-         * @brief traversal-tests.
+         * traversal-tests.
          ***************************************************/
 
         std::vector pre_order     { "include", "treelib", "detail", "base", "node.hpp", 
@@ -276,30 +284,30 @@ namespace tl
         std::println("{} :: traversal-tests passed", __FUNCTION__);
 
         /***************************************************
-         * @brief modifier-tests.
+         * modifier-tests.
          ***************************************************/
 
         std::println("{} :: modifier-tests passed", __FUNCTION__);
 
         /***************************************************
-         * @brief constructor/assignment-operator-tests.
+         * constructor/assignment-operator-tests.
          ***************************************************/
 
-        // tree_type my_tree_copy(my_tree);
+        tree_type my_tree_copy(my_tree);
 
-        // assert(my_tree_copy == my_tree);
+        assert(my_tree_copy == my_tree);
 
-        // tree_type my_tree_move = std::move(my_tree_copy);
+        tree_type my_tree_move = std::move(my_tree_copy);
 
-        // assert(my_tree_move == my_tree);
+        assert(my_tree_move == my_tree);
 
         std::println("{} :: constructor/assignment-operator passed", __FUNCTION__);
 
         /***************************************************
-         * @brief information-tests.
+         * information-tests.
          ***************************************************/
 
-        // assert(my_tree_copy == my_tree);
+        assert(my_tree_copy == my_tree);
 
         std::println("{} :: information-tests passed", __FUNCTION__);
     }
