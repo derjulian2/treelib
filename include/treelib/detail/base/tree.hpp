@@ -806,12 +806,21 @@ namespace tl
          *        similiar to the difference of std::list
          *        and std::forward_list (next/prev-pointers
          *        vs only next-pointer).
-         *        
-         *        this mixin is written with the intention
-         *        that BaseT is either _header_base or
-         *        _root_base, depending on the desired
-         *        properties of the final tree.
          *************************************************************/
+        template <typename NodeT,
+                  typename AllocT>
+        class _outward_tree_base
+        {
+
+        };
+
+        template <typename NodeT,
+                  typename AllocT>
+        class _tree_base
+        {
+
+        };
+
         template <typename BaseT>
         class _outward_tree_mixin
             : public BaseT

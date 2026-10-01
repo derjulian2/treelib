@@ -115,38 +115,20 @@ namespace tl
         /*********************************************************************************
          * @brief   requirements of a node-type to
          *          be used in a tree-container.
+         *
          * @details nodes consist of recursion-points
          *          that somehow reference the root-node of
          *          a subtree (e.g. .left/.right in a binary-tree).
          *          
-         *          these recursion-points are owning references, meaning
-         *          the lifetime of a node that is referenced by a recursion-point 
+         *          these recursion-points are owning references, meaning the
+         *          lifetime of a node that is referenced by such a recursion-point 
          *          of another node will be dependent on the lifetime of that parent-node.
          *
-         *          example. consider the following node-specification:
-         *
-         *              BTree ::= BNil | BNode x (BTree) (BTree)
-         *
-         *          which could be implemented by the following structure:
-         *
-         *              struct bnode {
-         *                  bnode *left;
-         *                  bnode *right;
-         *                  
-         *                  typedef bool hook_type;
-         *              };
-         *
-         *          which would mean that this node has two recursion-points
-         *          which are addressed with a boolean true;(left)/false;(right) value.
-         *
-         *          when trying to erase a node here, there would be a 'hole' in the
-         *          parent's recursion-point for that node, because it would point to
-         *          the memory of the deallocated node and there would be no way
-         *          to securely delete a node without some '.parent'-back-reference to
-         *          notify the relevant nodes about the change.
-         *          
-         *          this property is something that seperates nodes like these from 
-         *          others regarding it's capabilities.
+         *          this 'owning' hierarchy between nodes is seperate from the
+         *          the actual tree-hierarchy though, to allow for nodes that
+         *          own other nodes on the same 'level' as themselves. 
+         *          these are therefore not considered children of that node, but
+         *          their lifetime still depends on the non-parent node. 
          *********************************************************************************/
         template <typename T>
         concept _tree_node
@@ -178,17 +160,47 @@ namespace tl
                 { t->_m_unhook_if(t) };
                 
                 /***************************************************
-                 * @brief accessors to all subtrees at the
-                 *        respective recursion-points.
-                 *        note that not all children require a 
-                 *        corresponding hook-value to qualify as
-                 *        a child-node @see tl::_detail::_listrose_node
+                 * @brief accessors to all nodes whose lifetime
+                 *        should be considered dependent of that of
+                 *        the current-node. 
+                 *
+                 *        these can be either children or
+                 *        siblings of the current-node, but should
+                 *        not be parent-nodes.
+                 ***************************************************/
+                { t->_m_subordinates() }
+                    -> std::ranges::range;
+                requires std::convertible_to<
+                            std::ranges::range_value_t<decltype(t->_m_subordinates())>,
+                            T*>;
+                { ct->_m_subordinates() }
+                    -> std::ranges::range;
+                requires std::convertible_to<
+                            std::ranges::range_value_t<decltype(ct->_m_subordinates())>,
+                            T*>;
+
+                /***************************************************
+                 * @brief accessors to all nodes that should be
+                 *        considered a child of the current node,
+                 *        implying that it is 'structurally deeper'
+                 *        inside the tree's hierarchy.
+                 *
+                 * @note  that not all children require a 
+                 *        corresponding hook-value at all times
+                 *        to qualify as a child-node. 
+                 *        @see tl::_detail::_listrose_node
                  *        as an example.
                  ***************************************************/
                 { t->_m_children() }
                     -> std::ranges::range;
+                requires std::convertible_to<
+                            std::ranges::range_value_t<decltype(t->_m_children())>,
+                            T*>;
                 { ct->_m_children() }
                     -> std::ranges::range;
+                requires std::convertible_to<
+                            std::ranges::range_value_t<decltype(ct->_m_children())>,
+                            T*>;
             };
 
         /********************************************************
@@ -733,6 +745,19 @@ namespace tl
                 _treelib_noexcept_if(_node->_m_children())
             { return _node->_m_children(); }
 
+            // forward call to member-function if present
+            static constexpr decltype(auto)
+            _s_subordinates(_m_cptr_t _node)
+                _treelib_noexcept_if(_node->_m_subordinates())
+                requires _treelib_has_member(_m_node_t, _m_subordinates)
+            { return _node->_m_subordinates(); }
+
+            // SFINAE fallback, default is same as children
+            static constexpr decltype(auto)
+            _s_subordinates(_m_cptr_t _node)
+                _treelib_noexcept_if(_s_children(_node))
+            { return _s_children(_node); }
+
             static constexpr _m_ptr_t
             _s_parent(_m_cptr_t _node)
                 _treelib_noexcept_if(_node->_m_parent())
@@ -818,11 +843,11 @@ namespace tl
                 _treelib_noexcept_if(_s_first_child(_parent))
             { return _s_first_child(_parent) == _node; }
 
+            // '_node' cannot be a root-node here
             static constexpr bool
             _s_is_first_child(_m_cptr_t _node)
                 _treelib_noexcept_if(_s_is_first_child_of(_s_parent(_node), _node))
                 requires _bidirectional_tree_node<_m_node_t>
-            // '_node' cannot be a root-node here
             { return _s_is_first_child_of(_s_parent(_node), _node); }
 
             static constexpr bool
@@ -830,25 +855,26 @@ namespace tl
                 _treelib_noexcept_if(_s_last_child(_parent))
             { return _s_last_child(_parent) == _node; }
 
+            // '_node' cannot be a root-node here 
             static constexpr bool
             _s_is_last_child(_m_cptr_t _node)
                 _treelib_noexcept_if(_s_is_last_child_of(_s_parent(_node), _node))
                 requires _bidirectional_tree_node<_m_node_t>
-            // '_node' cannot be a root-node here 
             { return _s_is_last_child_of(_s_parent(_node), _node); }
 
             /***************************************************
              * @brief sibling accessors.
              ***************************************************/
 
+             // forward call to member-function if present
             static constexpr _m_ptr_t
             _s_next_sibling(_m_cptr_t _node)
                 _treelib_noexcept_if(_node->_m_next_sibling())
                 requires (_bidirectional_tree_node<_m_node_t> 
                           && _treelib_has_member(_m_cref_t, _m_next_sibling))
-            // forward call to member-function if present
             { return _node->_m_next_sibling(); }
 
+            // SFINAE fallback
             static constexpr _m_ptr_t
             _s_next_sibling(_m_cptr_t _node)
                 noexcept(_treelib_noexcept_iterable(_s_children(_node))
@@ -856,7 +882,6 @@ namespace tl
                          && noexcept(_s_is_last_child(_node))
                          && noexcept(_s_parent(_node)))
                 requires _bidirectional_tree_node<_m_node_t>
-            // SFINAE fallback
             {
                 if (_s_is_root(_node) || _s_is_last_child(_node))
                     return nullptr;
@@ -866,14 +891,15 @@ namespace tl
                                    _node) + 1);
             }
 
+            // forward call to member-function if present
             static constexpr _m_ptr_t
             _s_prev_sibling(_m_cptr_t _node)
                 _treelib_noexcept_if(_node->_m_prev_sibling())
                 requires (_bidirectional_tree_node<_m_node_t> 
                           && _treelib_has_member(_m_cref_t, _m_prev_sibling))
-            // forward call to member-function if present
             { return _node->_m_prev_sibling(); }
 
+            // SFINAE fallback
             static constexpr _m_ptr_t
             _s_prev_sibling(_m_cptr_t _node)
                 noexcept(_treelib_noexcept_iterable(_s_children(_node))
@@ -881,7 +907,6 @@ namespace tl
                          && noexcept(_s_is_first_child(_node))
                          && noexcept(_s_parent(_node)))
                 requires _bidirectional_tree_node<_m_node_t>
-            // SFINAE fallback
             {
                 if (_s_is_root(_node) || _s_is_first_child(_node))
                     return nullptr;

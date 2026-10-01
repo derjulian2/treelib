@@ -7,13 +7,28 @@
  * @author Julian Benzel
  * @date   03.07.2026
  *
- * @brief  balanced binary-search-tree.
+ * @brief  balanced binary-search-tree implemented
+ *         using a flat vector-based binary-tree.
  ***************************************************/
 
-#include <treelib/detail/trees/binary_tree.hpp>
+#include <compare>
+#include <functional>
 
 namespace tl
 {
+    namespace _detail
+    {
+        template <typename T,
+                  typename AllocT>
+        struct _flat_binary_tree
+        {
+            using _m_alloc_t = AllocT;
+            using _m_vec_t   = std::vector<T, AllocT>;
+
+            _m_vec_t _m_data;
+        };
+    }
+
     /***************************************************
      * @brief balanced binary-search-tree with
      *        iterator-stability upon insertion/erasure.
@@ -22,7 +37,7 @@ namespace tl
               typename Allocator>
         requires std::three_way_comparable<T, std::less<>>
     struct avl_tree
-        : protected outward_binary_tree<T, Allocator>
+        : protected _detail::_flat_binary_tree<T, Allocator>
     {
     private:
 
