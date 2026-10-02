@@ -843,6 +843,12 @@ namespace tl
             template <traversal Trav>
             using _m_to_trav_t = _to_traversal_t<Trav, _m_node_t>;
 
+            template <bool IsConst,
+                  bool IsLazy,
+                  traversal Trav,
+                  typename QueueAllocT>
+            using _m_queued_info_t = _queued_iter_info<IsConst, IsLazy, Trav, _m_value_t, _m_node_t, QueueAllocT>;
+
         public:
 
             using typename _m_base_t::allocator_type;
@@ -851,15 +857,47 @@ namespace tl
             static constexpr traversal
                 default_traversal = traversal::depth_first;
 
-            template <traversal Trav, 
+            template <traversal Trav,
+                      bool Laziness = true,
                       typename QueueAllocator = allocator_type>
-            using queued_iterator       
-                = _queued_iterator<false, _m_value_t, _m_to_trav_t<Trav>, QueueAllocator>;
+            using any_queued_iterator
+                = _queued_iterator<_m_queued_info_t<false, Laziness, Trav, QueueAllocator>>;
+
+            template <traversal Trav,
+                      bool Laziness = true,
+                      typename QueueAllocator = allocator_type>
+            using any_const_queued_iterator
+                = _queued_iterator<_m_queued_info_t<true, Laziness, Trav, QueueAllocator>>;
 
             template <traversal Trav, 
                       typename QueueAllocator = allocator_type>
-            using const_queued_iterator 
-                = _queued_iterator<true, _m_value_t, _m_to_trav_t<Trav>, QueueAllocator>;
+            using lazy_queued_iterator 
+                = _queued_iterator<_m_queued_info_t<false, true, Trav, QueueAllocator>>;
+
+            template <traversal Trav, 
+                      typename QueueAllocator = allocator_type>
+            using const_lazy_queued_iterator 
+                = _queued_iterator<_m_queued_info_t<true, true, Trav, QueueAllocator>>;
+
+            template <traversal Trav, 
+                      typename QueueAllocator = allocator_type>
+            using greedy_queued_iterator 
+                = _queued_iterator<_m_queued_info_t<false, false, Trav, QueueAllocator>>;
+
+            template <traversal Trav, 
+                      typename QueueAllocator = allocator_type>
+            using const_greedy_queued_iterator 
+                = _queued_iterator<_m_queued_info_t<true, false, Trav, QueueAllocator>>;
+
+            template <traversal Trav, 
+                      typename QueueAllocator = allocator_type>
+            using queued_iterator       
+                = lazy_queued_iterator<Trav, QueueAllocator>;
+
+            template <traversal Trav, 
+                      typename QueueAllocator = allocator_type>
+            using const_queued_iterator       
+                = const_lazy_queued_iterator<Trav, QueueAllocator>;
 
             // using leaf_iterator       = _leaf_iterator<_m_value_t, _m_node_t>;
             
@@ -901,11 +939,12 @@ namespace tl
              * @returns a queued_iterator to the tree's root-node.
              ******************************************************************/
             template <traversal Trav,
+                      bool Laziness = true,
                       typename QueueAllocator = allocator_type>
-            constexpr queued_iterator<Trav, QueueAllocator> 
+            constexpr any_queued_iterator<Trav, Laziness, QueueAllocator> 
             qroot(const QueueAllocator& alloc = QueueAllocator())
             { 
-                using _iter_t = queued_iterator<Trav, QueueAllocator>;
+                using _iter_t = any_queued_iterator<Trav, Laziness, QueueAllocator>;
                 return _iter_traits<_iter_t>::_s_to_iter(this->_m_root_node(), alloc); 
             }
 
@@ -942,11 +981,12 @@ namespace tl
              * @returns a queued_iterator to the beginning.
              ******************************************************************/
             template <traversal Trav,
+                      bool Laziness = true,
                       typename QueueAllocator = allocator_type>
-            constexpr queued_iterator<Trav, QueueAllocator>
+            constexpr any_queued_iterator<Trav, Laziness, QueueAllocator> 
             qbegin(const QueueAllocator& alloc = QueueAllocator())
             { 
-                using _iter_t = queued_iterator<Trav, QueueAllocator>;
+                using _iter_t = any_queued_iterator<Trav, Laziness, QueueAllocator> ;
                 return this->template _m_begin<_iter_t>(alloc); 
             }
 
@@ -988,7 +1028,7 @@ namespace tl
             qend(const QueueAllocator& alloc = QueueAllocator())
             { 
                 using _iter_t = queued_iterator<Trav, QueueAllocator>;
-                return _iter_traits<_iter_t>::_s_to_iter(alloc); 
+                return _iter_traits<_iter_t>::_s_to_iter(nullptr, alloc); 
             }
 
             /******************************************************************
@@ -1009,7 +1049,7 @@ namespace tl
                 const
             { 
                 using _iter_t = const_queued_iterator<Trav, QueueAllocator>;
-                return _iter_traits<_iter_t>::_s_to_iter(alloc); 
+                return _iter_traits<_iter_t>::_s_to_iter(nullptr, alloc); 
             }
 
             /***************************************************
@@ -1147,17 +1187,21 @@ namespace tl
             using typename _m_base_t::_m_node_t;
             using typename _m_base_t::_m_value_t;
 
-            template <traversal Trav>
-            using _m_to_trav_t = _to_traversal_t<Trav, _m_node_t>;
+            template <bool IsConst,
+                      traversal Trav>
+            using _m_trav_info_t = _traversing_iter_info<IsConst, Trav, _m_value_t, _m_node_t>;
 
         public:
 
             using _m_base_t::_m_base_t;
 
             template <traversal Trav>
-            using traversing_iterator = _traversing_iterator<false, _m_value_t, _m_to_trav_t<Trav>>;
+            using traversing_iterator 
+                = _traversing_iterator<_m_trav_info_t<false, Trav>>;
+            
             template <traversal Trav>
-            using const_traversing_iterator = _traversing_iterator<true, _m_value_t, _m_to_trav_t<Trav>>;
+            using const_traversing_iterator 
+                = _traversing_iterator<_m_trav_info_t<true, Trav>>;
 
             using _m_base_t::default_traversal;
 

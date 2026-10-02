@@ -65,6 +65,15 @@ namespace tl
     namespace _detail
     {  
         /***************************************************
+         * @brief tags for tag-dispatch when selecting if
+         *        an begin-iterator is constructed from
+         *        a value-holding root-node, or a valueless
+         *        header-node.
+         ***************************************************/
+        struct _iter_begin_root_tag   { };
+        struct _iter_begin_header_tag { };
+
+        /***************************************************
          * @brief traversal-implementation-type 
          *        for depth-first-pre-order.
          *      
@@ -88,6 +97,20 @@ namespace tl
                 _traversing(_m_node_ptr_t _node = nullptr)
                     : _m_node(_node)
                 { }
+
+                constexpr
+                _traversing(_m_node_ptr_t _node, _iter_begin_root_tag)
+                    : _traversing(_node)
+                { }
+
+                // advance to header's first-child
+                constexpr
+                _traversing(_m_node_ptr_t _node, _iter_begin_header_tag)
+                    : _m_node(_node)
+                { 
+                    assert(_node != nullptr);
+                    this->_m_advance(); 
+                }
 
                 constexpr _m_node_ptr_t
                 _m_current()
@@ -150,7 +173,7 @@ namespace tl
                 using _m_queue_alloc_t 
                     = std::allocator_traits<QueueAllocT>::template rebind_alloc<_m_thunk_t>;
                 using _m_queue_t 
-                    = std::vector<_m_node_ptr_t, QueueAllocT>;
+                    = std::vector<_m_thunk_t, _m_queue_alloc_t>;
                 using _m_queue_iter_t
                     = _m_queue_t::iterator;
                 using _m_offset_t 
@@ -160,11 +183,34 @@ namespace tl
                 _m_offset_t _m_offset;
 
                 constexpr 
-                _queued_greedy(_m_node_ptr_t _node,
+                _queued_greedy(_m_node_ptr_t _node = nullptr,
                                const _m_alloc_t& _alloc = _m_alloc_t())
                     : _m_queue(_alloc)
                     , _m_offset(0)
-                { this->_m_expand(_node); }
+                { 
+                    if (_node) 
+                        this->_m_expand(_node); 
+                }
+
+                constexpr
+                _queued_greedy(_m_node_ptr_t _node, 
+                               _iter_begin_root_tag,
+                               const _m_alloc_t& _alloc = _m_alloc_t())
+                    : _queued_greedy(_node, _alloc)
+                { }
+
+                // expand and advance past header
+                constexpr
+                _queued_greedy(_m_node_ptr_t _node, 
+                               _iter_begin_header_tag,
+                               const _m_alloc_t& _alloc = _m_alloc_t())
+                    : _m_queue(_alloc)
+                    , _m_offset(0)
+                { 
+                    assert(_node != nullptr);
+                    this->_m_expand(_node); 
+                    this->_m_advance();
+                }
 
                 constexpr _m_queue_iter_t
                 _m_current_iter()
@@ -221,9 +267,11 @@ namespace tl
                 using _m_queue_alloc_t 
                     = std::allocator_traits<QueueAllocT>::template rebind_alloc<_m_thunk_t>;
                 using _m_queue_t 
-                    = std::vector<_m_node_ptr_t, QueueAllocT>;
+                    = std::vector<_m_thunk_t, _m_queue_alloc_t>;
                 using _m_queue_iter_t
                     = _m_queue_t::iterator;
+                using _m_queue_citer_t
+                    = _m_queue_t::const_iterator;
                 using _m_offset_t 
                     = _m_queue_t::size_type;
 
@@ -231,16 +279,43 @@ namespace tl
                 _m_offset_t _m_offset;
 
                 constexpr
-                _queued_lazy(_m_node_ptr_t _node,
+                _queued_lazy(_m_node_ptr_t _node = nullptr,
+                             const _m_alloc_t& _alloc = _m_alloc_t())
+                    : _m_queue(_alloc)
+                    , _m_offset(0)
+                { 
+                    if (_node)
+                        this->_m_queue.push_back(_node);
+                }
+
+                constexpr
+                _queued_lazy(_m_node_ptr_t _node, 
+                             _iter_begin_root_tag,
+                             const _m_alloc_t& _alloc = _m_alloc_t())
+                    : _queued_lazy(_node, _alloc)
+                { }
+
+                // expand/advance once past header
+                constexpr
+                _queued_lazy(_m_node_ptr_t _node, 
+                             _iter_begin_header_tag,
                              const _m_alloc_t& _alloc = _m_alloc_t())
                     : _m_queue({_node}, _alloc)
                     , _m_offset(0)
-                { }
+                { 
+                    assert(_node != nullptr);
+                    this->_m_advance(); 
+                }
 
                 constexpr _m_queue_iter_t
                 _m_current_iter()
-                    const noexcept
+                    noexcept
                 { return std::next(this->_m_queue.begin(), this->_m_offset); }
+
+                constexpr _m_queue_citer_t
+                _m_current_iter()
+                    const noexcept
+                { return std::next(this->_m_queue.cbegin(), this->_m_offset); }
 
                 constexpr _m_node_ptr_t
                 _m_current()
@@ -255,19 +330,21 @@ namespace tl
                 _m_advance_forward()
                 {
                     _m_queue_iter_t _cur = this->_m_current_iter();
-                    for (_m_node_ptr_t _child
-                        : _m_node_traits_t::_s_children(*_cur))
-                        this->_m_queue.emplace(std::next(_cur), _child);
+                    auto _children = _m_node_traits_t::_s_children(*_cur);
+                    this->_m_queue.insert(std::next(_cur),
+                                    std::ranges::begin(_children),
+                                    std::ranges::end(_children));
                 }
 
                 constexpr void
                 _m_advance_reverse()
                 {
                     _m_queue_iter_t _cur = this->_m_current_iter();
-                    for (_m_node_ptr_t _child
-                        : _m_node_traits_t::_s_children(*_cur)
-                        | std::views::reverse)
-                        this->_m_queue.emplace(std::next(_cur), _child);
+                    auto _children = _m_node_traits_t::_s_children(*_cur)
+                                     | std::views::reverse;
+                    this->_m_queue.insert(std::next(_cur),
+                                    std::ranges::begin(_children),
+                                    std::ranges::end(_children));
                 }
 
                 constexpr void
@@ -1359,30 +1436,26 @@ namespace tl
          *        post-increment/decrement, dereferencing
          *        and equality-comparison.
          ***************************************************/
-        template <bool IsConst,
-                  typename ValueT,
-                  typename NodeT,
+        template <typename InfoT,
                   typename IterT>
         class _iter_base
         {
         protected:
 
+            using _m_info_t = InfoT;
+
             template <typename T>
-            using _m_maybe_const_t = std::conditional_t<IsConst, const T, T>;
+            using _m_maybe_const_t = std::conditional_t<_m_info_t::_s_constness, const T, T>;
 
             using _m_iter_t       = IterT;
-            using _m_value_t      = ValueT;
-            using _m_node_t       = NodeT;
+            using _m_value_t      = typename _m_info_t::_m_value_t;
+            using _m_node_t       = typename _m_info_t::_m_node_t;
             using _m_node_ptr_t   = _m_node_t*;
             using _m_cnode_ptr_t  = const _m_node_t*;
             using _m_value_node_t = _value_node<_m_node_t, _m_value_t>;
             using _m_vnode_ptr_t  = _m_value_node_t*;
 
-            template <bool OtherIsConst, typename OtherIterT>
-            using _m_other_iter_t 
-                = _iter_base<OtherIsConst, _m_value_t, _m_node_t, OtherIterT>;
-
-            template <bool, typename, typename, typename>
+            template <typename, typename>
             friend class _iter_base;
 
             /***************************************************
@@ -1400,15 +1473,6 @@ namespace tl
             _m_iter()
                 const noexcept
             { return static_cast<const _m_iter_t*>(this); }
-
-            /***************************************************
-             * @brief accessor to derived-class's current node.
-             ***************************************************/
-
-            constexpr _m_node_ptr_t
-            _m_current()
-                const noexcept
-            { return this->_m_iter()->_m_current(); }
 
         public:
 
@@ -1430,13 +1494,13 @@ namespace tl
              *          traversing/leaf/sibling) should all be
              *          comparable to each other.
              ***************************************************/
-            template <bool OtherIsConst, typename OtherIterT>
+            template <typename OtherInfoT, typename OtherIterT>
             [[nodiscard]]
             friend constexpr bool
             operator==(const _iter_base& a, 
-                       const _m_other_iter_t<OtherIsConst, OtherIterT>& b)
+                       const _iter_base<OtherInfoT, OtherIterT>& b)
                 noexcept
-            { return a._m_current() == b._m_current(); }
+            { return a._m_iter()->_m_current() == b._m_iter()->_m_current(); }
 
             /***************************************************
              * @brief value accessors.
@@ -1450,9 +1514,9 @@ namespace tl
             #ifdef _treelib_no_exceptions
                 assert(this->_m_current() != nullptr)
             #else
-                if (this->_m_current() == nullptr)
+                if (this->_m_iter()->_m_current() == nullptr)
                     throw std::out_of_range("cannot dereference end-iterator");
-                return static_cast<_m_vnode_ptr_t>(this->_m_current())->_m_value();
+                return static_cast<_m_vnode_ptr_t>(this->_m_iter()->_m_current())->_m_value();
             #endif
             }
 
@@ -1480,9 +1544,7 @@ namespace tl
          *        for conversions between any iterator-type
          *        of correct node/value-type and constness.
          ***************************************************/
-        template <bool IsConst,
-                  typename ValueT,
-                  typename NodeT,
+        template <typename InfoT,
                   typename IterT>
         class _convertible_iter
             : public IterT
@@ -1490,16 +1552,13 @@ namespace tl
         protected:
 
             using _m_base_t = IterT;
+            using _m_info_t = InfoT;
             using typename _m_base_t::_m_iter_t;
             using typename _m_base_t::_m_node_t;
             using typename _m_base_t::_m_node_ptr_t;
             using typename _m_base_t::_m_value_t;
 
-            template <bool OtherIsConst, typename OtherIterT>
-            using _m_other_iter_t 
-                = _convertible_iter<OtherIsConst, _m_value_t, _m_node_t, OtherIterT>;
-
-            template <bool, typename, typename, typename>
+            template <typename, typename>
             friend class _convertible_iter;
 
         public:
@@ -1518,12 +1577,12 @@ namespace tl
              *          convertible to each other, if the constness
              *          allows it.
              ********************************************************/
-            template <bool OtherIsConst, typename OtherIterT>
+            template <typename OtherInfoT, typename OtherIterT>
                 // either this is const, or both are mutable
-                requires (IsConst || !OtherIsConst)
-            _convertible_iter(const _m_other_iter_t<OtherIsConst, OtherIterT>& other)
+                requires (_m_info_t::_s_constness || !OtherIterT::_m_info_t::_s_constness)
+            _convertible_iter(const _convertible_iter<OtherInfoT, OtherIterT>& other)
                 noexcept(std::is_nothrow_constructible_v<_m_base_t, _m_node_ptr_t>)
-                : _m_base_t(other._m_cur())
+                : _m_base_t(other._m_current())
             { }
         };
 
@@ -1560,6 +1619,28 @@ namespace tl
 
         };
 
+        /***************************************************
+         * @brief helper-struct to bundle all the
+         *        template-parameters together.
+         ***************************************************/
+        template <bool IsConst,
+                  traversal Trav,
+                  typename ValueT,
+                  typename NodeT>
+        struct _traversing_iter_info
+        {
+            static constexpr bool
+                _s_constness = IsConst;
+
+            static constexpr traversal
+                _s_traversal = Trav;
+
+            using _m_trav_t = _to_traversal_t<Trav, NodeT>;
+            using _m_trav_base_t = _m_trav_t::_m_trav_base_t;
+            using _m_node_t = NodeT;
+            using _m_value_t = ValueT;
+        };
+
         /********************************************************
          * @brief CRTP-base for traversing-iteration.
          *        
@@ -1568,30 +1649,22 @@ namespace tl
          *        to certain points), this class inherits
          *        these state-types based on the traversal-type.
          ********************************************************/
-        template <bool IsConst,
-                  traversal Trav,
-                  typename NodeT,
-                  typename ValueT,
+        template <typename InfoT,
                   typename IterT>
         struct _traversing_iterator_base
-            : public _iter_base<IsConst, ValueT, NodeT, IterT>
-            , protected _to_traversal_t<Trav, NodeT>::_traversing
+            : public _iter_base<InfoT, IterT>
+            , protected InfoT::_m_trav_base_t
         {
         protected:
 
-            using _m_trav_t      = _to_traversal_t<Trav, NodeT>;
-            using _m_base_t      = _iter_base<IsConst, ValueT, NodeT, IterT>;
-            using _m_trav_base_t = _m_trav_t::_queued;
+            using _m_base_t = _iter_base<InfoT, IterT>;
             using typename _m_base_t::_m_iter_t;
-
-            using _m_trav_base_t::_m_trav_base_t;
+            using typename _m_base_t::_m_info_t;
+            using _m_trav_base_t = typename _m_info_t::_m_trav_base_t;
 
         public:  
 
-            constexpr
-            _traversing_iterator_base()
-                : _m_trav_base_t()
-            { }
+            using _m_trav_base_t::_m_trav_base_t;
 
             constexpr _m_iter_t& 
             operator++()
@@ -1604,37 +1677,87 @@ namespace tl
         };
 
         /***************************************************
-         * @brief CRTP-base for queued iteration. 
+         * @brief helper-struct to bundle all the
+         *        template-parameters together.
          ***************************************************/
         template <bool IsConst,
+                  bool IsLazy,
                   traversal Trav,
                   typename ValueT,
                   typename NodeT,
-                  typename QueueAllocT,
+                  typename QueueAllocT>
+        struct _queued_iter_info
+        {
+            static constexpr bool
+                _s_constness = IsConst;
+            
+            static constexpr bool
+                _s_laziness = IsLazy;
+
+            static constexpr traversal
+                _s_traversal = Trav;
+
+            using _m_trav_t = _to_traversal_t<Trav, NodeT>;
+            using _m_alloc_t = QueueAllocT;
+            using _m_lazy_queued_base_t
+                = typename _m_trav_t::template _m_lazy_queued_base_t<_m_alloc_t>;
+            using _m_greedy_queued_base_t
+                = typename _m_trav_t::template _m_greedy_queued_base_t<_m_alloc_t>;
+            using _m_queued_base_t 
+                = std::conditional_t<_s_laziness, 
+                        _m_lazy_queued_base_t, _m_greedy_queued_base_t>;
+            using _m_node_t = NodeT;
+            using _m_value_t = ValueT;
+        };
+
+        /***************************************************
+         * @brief info-type wrappers to fixate a value.
+         *        (not sure if this is deducible later).
+         ***************************************************/
+
+        template <typename InfoT>
+        struct _greedy_queued_iter_info
+            : public InfoT
+        { 
+            static constexpr bool
+                _s_laziness = false;
+        };
+
+        template <typename InfoT>
+        struct _lazy_queued_iter_info
+            : public InfoT
+        { 
+            static constexpr bool
+                _s_laziness = true;
+        };
+
+        /***************************************************
+         * @brief CRTP-base for queued iteration. 
+         ***************************************************/
+        template <typename InfoT,
                   typename IterT>
         class _queued_iterator_base
-            : public _iter_base<IsConst, ValueT, NodeT, IterT>
-            , protected _to_traversal_t<Trav, NodeT>::_queued
+            : public _iter_base<InfoT, IterT>
+            , protected InfoT::_m_queued_base_t
         {
         protected:
     
-            using _m_trav_t      = _to_traversal_t<Trav, NodeT>;
-            using _m_base_t      = _iter_base<IsConst, ValueT, NodeT, IterT>;
-            using _m_trav_base_t = _m_trav_t::_queued;
+            using _m_base_t = _iter_base<InfoT, IterT>;
             using typename _m_base_t::_m_iter_t;
+            using typename _m_base_t::_m_info_t;
+            using _m_queued_base_t = typename _m_info_t::_m_queued_base_t;
+            using _m_alloc_t       = typename _m_info_t::_m_alloc_t;
 
             friend _m_base_t;
 
-            using _m_trav_base_t::_m_trav_base_t;
+            template <typename, typename>
+            friend class _iter_base;
 
         public:
  
-            using allocator_type = _m_trav_base_t::_m_alloc_t;
+            using allocator_type = _m_alloc_t;
 
-            constexpr
-            _queued_iterator_base(const allocator_type& alloc = allocator_type())
-                : _m_trav_base_t(alloc)
-            { }
+            using _m_queued_base_t::_m_queued_base_t;
 
             constexpr _m_iter_t& 
             operator++()
@@ -1654,57 +1777,40 @@ namespace tl
          *        them a bit more readable.
          **********************************************/
 
-        template <bool IsConst,
-                  traversal Trav,
-                  typename ValueT,
-                  typename NodeT,
-                  typename QueueAllocT>
+        template <typename InfoT>
         class _queued_iterator;
 
-        template <bool IsConst,
-                  traversal Trav,
-                  typename ValueT,
-                  typename NodeT>
+        template <typename InfoT>
         class _traversing_iterator;
 
-        template <bool IsConst,
-                  traversal Trav,
-                  typename ValueT,
-                  typename NodeT,
-                  typename QueueAllocT>
+        template <typename InfoT>
         using _queued_iter_base
-            = _convertible_iter<IsConst, ValueT, NodeT,
-                _queued_iterator_base<IsConst, Trav, ValueT, NodeT, QueueAllocT,
-                  _queued_iterator<IsConst, Trav, ValueT, NodeT, QueueAllocT>>>;
+            = _convertible_iter<InfoT, 
+                _queued_iterator_base<InfoT,
+                    _queued_iterator<InfoT>>>;
 
-        template <bool IsConst,
-                  traversal Trav,
-                  typename ValueT,
-                  typename NodeT>
+        template <typename InfoT>
         using _traversing_iter_base
-            = _convertible_iter<IsConst, ValueT, NodeT,
-                _traversing_iterator_base<IsConst, Trav, ValueT, NodeT,
-                  _traversing_iterator<IsConst, Trav, ValueT, NodeT>>>;
+            = _convertible_iter<InfoT, 
+                _traversing_iterator_base<InfoT,
+                    _traversing_iterator<InfoT>>>;
 
         /***************************************************
          * @brief iterator that traverses a tree iteratively, 
          *        (no breadth-first). 
          ***************************************************/
-        template <bool IsConst,
-                  traversal Trav,
-                  typename ValueT,
-                  typename NodeT>
+        template <typename InfoT>
         struct _traversing_iterator
-            : public _traversing_iter_base<IsConst, Trav, ValueT, NodeT>
+            : public _traversing_iter_base<InfoT>
         {
         protected:
 
-            using _m_base_t      = _traversing_iter_base<IsConst, Trav, ValueT, NodeT>;
+            using _m_base_t = _traversing_iter_base<InfoT>;
             using _m_iter_base_t = typename _m_base_t::_m_base_t;
             using typename _m_base_t::_m_iter_t;
 
-            friend _iter_traits<_m_iter_t>;
             friend _m_iter_base_t;
+            friend _iter_traits<_m_iter_t>;
 
         public:
 
@@ -1715,22 +1821,18 @@ namespace tl
          * @brief iterator that traverses a tree by
          *        progressively building up a queue of nodes.
          ***************************************************/
-        template <bool IsConst,
-                  traversal Trav,
-                  typename ValueT,
-                  typename NodeT,
-                  typename QueueAllocT>
+        template <typename InfoT>
         class _queued_iterator
-            : public _queued_iter_base<IsConst, Trav, ValueT, NodeT, QueueAllocT>
+            : public _queued_iter_base<InfoT>
         {
         protected:
 
-            using _m_base_t      = _queued_iter_base<IsConst, Trav, ValueT, NodeT, QueueAllocT>;
+            using _m_base_t = _queued_iter_base<InfoT>;
             using _m_iter_base_t = typename _m_base_t::_m_base_t;
             using typename _m_base_t::_m_iter_t;
 
-            friend _iter_traits<_m_iter_t>;
             friend _m_iter_base_t;
+            friend _iter_traits<_m_iter_t>;
 
         public:
 
@@ -1757,78 +1859,45 @@ namespace tl
             template <typename... ArgsTs>
             static constexpr _m_iter_t
             _s_root_begin(_m_node_ptr_t _node, ArgsTs&&... _args)
-                _treelib_noexcept_if(_m_iter_t::_s_root_begin(_node, std::forward<ArgsTs>(_args)...))
-            { return _m_iter_t::_s_root_begin(_node, std::forward<ArgsTs>(_args)...); }
+            { return _m_iter_t(_node, _iter_begin_root_tag(), std::forward<ArgsTs>(_args)...); }
 
             template <typename... ArgsTs>
             static constexpr _m_iter_t
             _s_header_begin(_m_node_ptr_t _node, ArgsTs&&... _args)
-                _treelib_noexcept_if(_m_iter_t::_s_header_begin(_node, std::forward<ArgsTs>(_args)...))
-            { return _m_iter_t::_s_header_begin(_node, std::forward<ArgsTs>(_args)...); }
+            { return _m_iter_t(_node, _iter_begin_header_tag(), std::forward<ArgsTs>(_args)...); }
 
             template <typename... ArgsTs>
             static constexpr _m_iter_t
             _s_to_iter(ArgsTs&&... _args)
-                noexcept(std::is_nothrow_constructible_v<_m_iter_t, _m_node_ptr_t, ArgsTs...>)
             { return IterT(_args...); }
 
             static constexpr _m_node_ptr_t 
             _s_to_node(const _m_iter_t& _iter)
                 noexcept
             { return _iter._m_current(); }
-
-            static constexpr auto&
-            _s_trav_state(_m_iter_t& _iter)
-                requires _treelib_has_member_type(_m_iter_t, _m_trav_state_t)
-            {
-                using _state_t = typename _m_iter_t::_m_trav_state_t;
-                return static_cast<_state_t&>(_iter); 
-            }
         };
     }
 
     /***************************************************
      * @brief iterator-type aliases.
-     *
-     * @note  the ugly template-parameters
-     *        should get deduced when constructing these
-     *        types from an existing iterator.
-     *
-     *        these aliases exist only for the convenience
-     *        of not having to prefix the tree-type
-     *        when wanting to specify an iterator.
      ***************************************************/
 
-    template <bool IsConst, 
-              traversal Trav,
-              typename ValueT,
-              typename NodeT,
-              typename QueueAllocT = std::allocator<ValueT>>
+    template <typename InfoT>
     using greedy_queued_iterator
-        = _detail::_queued_iterator<IsConst, Trav, ValueT, NodeT, QueueAllocT>;
+        = _detail::_queued_iterator<_detail::_greedy_queued_iter_info<InfoT>>;
 
-    template <bool IsConst, 
-              traversal Trav,
-              typename ValueT,
-              typename NodeT,
-              typename QueueAllocT = std::allocator<ValueT>>
+    template <typename InfoT>
     using lazy_queued_iterator
-        = _detail::_queued_iterator<IsConst, Trav, ValueT, NodeT, QueueAllocT>;
+        = _detail::_queued_iterator<_detail::_lazy_queued_iter_info<InfoT>>;
 
-    template <bool IsConst, 
-              traversal Trav,
-              typename ValueT,
-              typename NodeT,
-              typename QueueAllocT = std::allocator<ValueT>>
+    // default is lazy
+    template <typename InfoT>
     using queued_iterator
-        = lazy_queued_iterator<IsConst, Trav, ValueT, NodeT, QueueAllocT>;
+        = lazy_queued_iterator<InfoT>;
 
-    template <bool IsConst,
-              traversal Trav,
-              typename ValueT,
-              typename NodeT>
+    template <typename InfoT>
     using traversing_iterator
-        = _detail::_traversing_iterator<IsConst, Trav, ValueT, NodeT>;
+        = _detail::_traversing_iterator<InfoT>;
 }
 
 #endif
