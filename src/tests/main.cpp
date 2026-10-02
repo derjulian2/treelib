@@ -58,6 +58,19 @@ namespace tl
         std::vector in_order      { 3, 2, 4, 1, 6, 5, 7 };
         std::vector breadth_first { 1, 2, 5, 3, 4, 6, 7 };
 
+        /***************************************************
+         * greedy-queued-iteration.
+         ***************************************************/
+
+        assert(std::ranges::equal(my_tree.cqbegin<traversal::depth_first, false>(), 
+                                  my_tree.cqend<traversal::depth_first, false>(), 
+                                  pre_order.cbegin(), 
+                                  pre_order.cend()));
+
+        /***************************************************
+         * lazy-queued-iteration.
+         ***************************************************/
+
         assert(std::ranges::equal(my_tree.cbegin(), 
                                   my_tree.cend(), 
                                   pre_order.cbegin(), 

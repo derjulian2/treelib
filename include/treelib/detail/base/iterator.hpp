@@ -62,6 +62,12 @@ namespace tl
         breadth_first
     };
 
+    enum struct queued_kind
+    {
+        greedy,
+        lazy
+    };
+
     namespace _detail
     {  
         /***************************************************
@@ -176,6 +182,8 @@ namespace tl
                     = std::vector<_m_thunk_t, _m_queue_alloc_t>;
                 using _m_queue_iter_t
                     = _m_queue_t::iterator;
+                using _m_queue_citer_t
+                    = _m_queue_t::const_iterator;
                 using _m_offset_t 
                     = _m_queue_t::size_type;
 
@@ -214,8 +222,14 @@ namespace tl
 
                 constexpr _m_queue_iter_t
                 _m_current_iter()
-                    const noexcept
+                    noexcept
                 { return std::next(this->_m_queue.begin(), this->_m_offset); }
+
+
+                constexpr _m_queue_citer_t
+                _m_current_iter()
+                    const noexcept
+                { return std::next(this->_m_queue.cbegin(), this->_m_offset); }
 
                 constexpr _m_node_ptr_t
                 _m_current()

@@ -960,12 +960,13 @@ namespace tl
              * @returns a const_queued_iterator to the tree's root-node.
              ******************************************************************/
             template <traversal Trav,
+                      bool Laziness,
                       typename QueueAllocator = allocator_type>
-            constexpr const_queued_iterator<Trav, QueueAllocator>  
+            constexpr any_const_queued_iterator<Trav, Laziness, QueueAllocator> 
             cqroot(const QueueAllocator& alloc = QueueAllocator())
                 const
             { 
-                using _iter_t = const_queued_iterator<Trav, QueueAllocator>;
+                using _iter_t = any_const_queued_iterator<Trav, Laziness, QueueAllocator> ;
                 return _iter_traits<_iter_t>::_s_to_iter(this->_m_root_node(), alloc); 
             }
 
@@ -1002,12 +1003,13 @@ namespace tl
              * @returns a const_queued_iterator to the beginning.
              ******************************************************************/
             template <traversal Trav,
+                      bool Laziness = true,
                       typename QueueAllocator = allocator_type>
-            constexpr const_queued_iterator<Trav, QueueAllocator>
+            constexpr any_const_queued_iterator<Trav, Laziness, QueueAllocator> 
             cqbegin(const QueueAllocator& alloc = QueueAllocator())
                 const
             { 
-                using _iter_t = const_queued_iterator<Trav, QueueAllocator>;
+                using _iter_t = any_const_queued_iterator<Trav, Laziness, QueueAllocator> ;
                 return this->template _m_begin<_iter_t>(alloc); 
             }
 
@@ -1023,11 +1025,12 @@ namespace tl
              * @returns a queued_iterator to the end.
              ******************************************************************/
             template <traversal Trav,
+                      bool Laziness = true,
                       typename QueueAllocator = allocator_type>
-            constexpr queued_iterator<Trav, QueueAllocator>
+            constexpr any_queued_iterator<Trav, Laziness, QueueAllocator> 
             qend(const QueueAllocator& alloc = QueueAllocator())
             { 
-                using _iter_t = queued_iterator<Trav, QueueAllocator>;
+                using _iter_t = any_queued_iterator<Trav, Laziness, QueueAllocator> ;
                 return _iter_traits<_iter_t>::_s_to_iter(nullptr, alloc); 
             }
 
@@ -1043,12 +1046,13 @@ namespace tl
              * @returns a const_queued_iterator to the end.
              ******************************************************************/
             template <traversal Trav,
+                      bool Laziness = true,
                       typename QueueAllocator = allocator_type>
-            constexpr const_queued_iterator<Trav, QueueAllocator>
+            constexpr any_const_queued_iterator<Trav, Laziness, QueueAllocator> 
             cqend(const QueueAllocator& alloc = QueueAllocator())
                 const
             { 
-                using _iter_t = const_queued_iterator<Trav, QueueAllocator>;
+                using _iter_t = any_const_queued_iterator<Trav, Laziness, QueueAllocator> ;
                 return _iter_traits<_iter_t>::_s_to_iter(nullptr, alloc); 
             }
 
