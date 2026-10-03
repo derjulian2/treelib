@@ -188,6 +188,15 @@ namespace tl
                 , _m_base_t(children)
             { }
 
+            /*****************************************
+             *     _____--_--_
+             *    /    |   o |
+             *   /| ___ L_\ ||  
+             *    L|   L|  `||`
+             *
+             * this my emotional-support elephant. 
+             * his name is sam.
+             *****************************************/
             constexpr const _m_value_t&
             _m_value()
                 const noexcept

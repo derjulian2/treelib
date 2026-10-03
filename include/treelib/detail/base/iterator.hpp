@@ -126,31 +126,33 @@ namespace tl
                 static constexpr _m_node_ptr_t
                 _s_advance_forward(_m_node_ptr_t _node)
                 {
-                    _m_node_ptr_t _sibling = nullptr;
                     if (!_m_node_traits_t::_s_is_leaf(_node))
                         return _m_node_traits_t::_s_first_child(_node);
-                    while (!(_sibling = _m_node_traits_t::_s_next_sibling(_node)))   
+                    if (_m_node_traits_t::_s_is_root(_node))
+                        return nullptr;
+                    while (_m_node_traits_t::_s_is_last_child(_node))   
                     {
                         _node = _m_node_traits_t::_s_parent(_node);
                         if (_m_node_traits_t::_s_is_root(_node))
                             return nullptr;
                     }
-                    return _sibling;
+                    return _m_node_traits_t::_s_next_sibling(_node);
                 }
 
                 static constexpr _m_node_ptr_t
                 _s_advance_reverse(_m_node_ptr_t _node)
                 {
-                    _m_node_ptr_t _sibling = nullptr;
                     if (!_m_node_traits_t::_s_is_leaf(_node))
                         return _m_node_traits_t::_s_last_child(_node);
-                    while (!(_sibling = _m_node_traits_t::_s_prev_sibling(_node)))   
+                    if (_m_node_traits_t::_s_is_root(_node))
+                            return nullptr;
+                    while (_m_node_traits_t::_s_is_first_child(_node))   
                     {
                         _node = _m_node_traits_t::_s_parent(_node);
                         if (_m_node_traits_t::_s_is_root(_node))
                             return nullptr;
                     }
-                    return _sibling;
+                    return _m_node_traits_t::_s_prev_sibling(_node);
                 }
 
                 constexpr void
@@ -344,7 +346,7 @@ namespace tl
                 _m_advance_forward()
                 {
                     _m_queue_iter_t _cur = this->_m_current_iter();
-                    auto _children = _m_node_traits_t::_s_children(*_cur);
+                    decltype(auto) _children = _m_node_traits_t::_s_children(*_cur);
                     this->_m_queue.insert(std::next(_cur),
                                     std::ranges::begin(_children),
                                     std::ranges::end(_children));
@@ -354,7 +356,7 @@ namespace tl
                 _m_advance_reverse()
                 {
                     _m_queue_iter_t _cur = this->_m_current_iter();
-                    auto _children = _m_node_traits_t::_s_children(*_cur)
+                    decltype(auto) _children = _m_node_traits_t::_s_children(*_cur)
                                      | std::views::reverse;
                     this->_m_queue.insert(std::next(_cur),
                                     std::ranges::begin(_children),
