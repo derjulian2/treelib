@@ -46,6 +46,60 @@ namespace tl
                 })
             )
         );
+        tree_type my_other_tree = my_tree;
+
+        /***************************************************
+         * synopsis.
+         ***************************************************/
+
+        // member-types
+        tree_type::value_type;
+        tree_type::pointer;
+        tree_type::const_pointer;
+        tree_type::reference;
+        tree_type::const_reference;
+
+        tree_type::allocator_type;
+        tree_type::size_type;
+        tree_type::hook_type;
+        tree_type::initializer_tree_type;
+
+        tree_type::iterator;
+        tree_type::const_iterator;
+
+        // information
+        (void)my_tree.size();
+        (void)my_tree.max_size();
+        (void)my_tree.empty();
+        (void)my_tree.get_allocator();
+        
+        // iterators
+        my_tree.begin();
+        my_tree.cbegin();
+        my_tree.end();
+        my_tree.cend();
+        my_tree.root();
+        my_tree.croot();
+
+        // queued-iterators
+        my_tree.qbegin<traversal::depth_first, queued::greedy>();
+        my_tree.cqbegin<traversal::depth_first, queued::lazy>();
+        my_tree.qend<traversal::depth_first, queued::greedy>();
+        my_tree.cqend<traversal::depth_first, queued::lazy>();
+        my_tree.qroot<traversal::depth_first>();
+        my_tree.cqroot<traversal::depth_first>();
+
+        // modifiers
+        my_tree.emplace_root(2);
+        my_tree.insert_root(3);
+
+        my_tree.emplace(binary::left, my_tree.root(), 4);
+        my_tree.insert(binary::left, my_tree.root(), 4);
+        my_tree.insert_subtree(binary::left, my_tree.root(), ++my_tree.cqbegin<traversal::depth_first>());
+
+        my_tree.erase_at(binary::left, my_tree.root());
+        my_tree.splice_to(binary::left, my_tree.root(), std::move(my_other_tree));
+        my_tree.splice_to(binary::right, my_tree.root(), std::move(my_other_tree), ++my_other_tree.cbegin());
 
         std::println("{} :: initializer-tests passed", __FUNCTION__);
 
@@ -58,12 +112,16 @@ namespace tl
         std::vector in_order      { 3, 2, 4, 1, 6, 5, 7 };
         std::vector breadth_first { 1, 2, 5, 3, 4, 6, 7 };
 
+        queued_iterator it = my_tree.begin();
+        
+
+
         /***************************************************
          * greedy-queued-iteration.
          ***************************************************/
 
-        assert(std::ranges::equal(my_tree.cqbegin<traversal::depth_first, false>(), 
-                                  my_tree.cqend<traversal::depth_first, false>(), 
+        assert(std::ranges::equal(my_tree.cqbegin<traversal::depth_first, queued::greedy>(), 
+                                  my_tree.cqend<traversal::depth_first, queued::greedy>(), 
                                   pre_order.cbegin(), 
                                   pre_order.cend()));
 

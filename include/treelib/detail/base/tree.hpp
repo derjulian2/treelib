@@ -7,7 +7,7 @@
  * @author Julian Benzel
  * @date   25.09.2026
  *
- * @brief  base-classes/mixins for common tree-types
+ * @brief  base-classes for common tree-types
  *         operating on the respective node-type.
  ***************************************************/
 
@@ -32,7 +32,7 @@ namespace tl
                   typename AllocT>
         class _alloc_base
         {
-        public:
+        protected:
 
             using _m_alloc_t        = AllocT;
             using _m_alloc_traits_t = std::allocator_traits<_m_alloc_t>;
@@ -54,6 +54,22 @@ namespace tl
             [[no_unique_address]]
             _m_node_alloc_t _m_node_alloc;
 
+            /*****************************************
+             * special-member-functions, protected.
+             *****************************************/
+
+            constexpr
+            _alloc_base(const _m_node_alloc_t& _node_alloc)
+                noexcept(std::is_nothrow_copy_constructible_v<_m_node_alloc_t>)
+                requires std::is_copy_assignable_v<_m_node_alloc_t>
+                : _m_node_alloc(_node_alloc)
+            { }
+
+            constexpr
+            ~_alloc_base() 
+                noexcept(std::is_nothrow_destructible_v<_m_node_alloc_t>) 
+                = default;
+
             /***************************************************
              * creation/destruction of nodes.
              ***************************************************/
@@ -71,7 +87,8 @@ namespace tl
             { 
                 _m_vnode_ptr_t _res 
                     = _m_node_alloc_traits_t::allocate(this->_m_node_alloc, 1);
-                _m_node_alloc_traits_t::construct(this->_m_node_alloc, _res, std::forward<ArgsTs>(_args)...);
+                _m_node_alloc_traits_t::construct(this->_m_node_alloc, _res, 
+                    std::forward<ArgsTs>(_args)...);
                 return _res;
             }
 
@@ -98,9 +115,9 @@ namespace tl
                 return _res;
             }
 
-            /***************************************************
+            /********************************************************
              * @brief destructs and deallocates a node-instance.
-             ***************************************************/
+             ********************************************************/
             constexpr void 
             _m_put_node(_m_vnode_ptr_t _node) 
                 noexcept
@@ -108,7 +125,7 @@ namespace tl
                 _m_node_alloc_traits_t::destroy(this->_m_node_alloc, _node);
                 _m_node_alloc_traits_t::deallocate(this->_m_node_alloc, _node, 1);
             }
-            
+
         public:
 
             using allocator_type  = _m_alloc_t;
@@ -121,21 +138,18 @@ namespace tl
             using size_type       = typename _m_alloc_traits_t::size_type;
 
             /***************************************************
-             * @brief constructor (1).
-             *        default-constructible if allocator_type
+             * @brief default-constructible if allocator_type
              *        is default-constructible.
              ***************************************************/
             constexpr 
             _alloc_base()
-                noexcept(std::is_nothrow_default_constructible_v<_m_alloc_t>)
-                requires std::default_initializable<_m_alloc_t>   
-                : _m_node_alloc()
-            { }
+                noexcept(std::is_nothrow_default_constructible_v<allocator_type>)
+                requires std::default_initializable<allocator_type>   
+                = default;
 
-            /***************************************************
-             * @brief constructor (2).
-             *        constructs from a given allocator-instance.
-             ***************************************************/
+            /********************************************************
+             * @brief constructs from a given allocator-instance.
+             ********************************************************/
             constexpr
             _alloc_base(const allocator_type& alloc)
                 noexcept(std::is_nothrow_copy_constructible_v<allocator_type>)
@@ -143,18 +157,18 @@ namespace tl
                 : _m_node_alloc(alloc)
             { }
 
-            /***************************************************
+            /*****************************************
              * @returns the associated allocator.
-             ***************************************************/
+             *****************************************/
             [[nodiscard]]
             constexpr allocator_type
             get_allocator() 
                 const noexcept 
             { return _m_alloc_t(this->_m_node_alloc); }
 
-            /***************************************************
+            /********************************************************
              * @returns the maximum possible number of elements.
-             ***************************************************/
+             ********************************************************/
             [[nodiscard]]
             constexpr size_type
             max_size()
@@ -163,8 +177,8 @@ namespace tl
         };
 
         /***************************************************
-         * @brief base-class for trees to save their
-         *        node-count in a member-variable.
+         * @brief base-class that keeps track of a
+         *        tree's node-count in a member-variable.
          ***************************************************/
         template <typename AllocT>
         class _size_base
@@ -177,17 +191,25 @@ namespace tl
 
             _m_size_t _m_node_count;
 
+            /*****************************************
+             * special-member-functions, protected.
+             *****************************************/
+
             constexpr
             _size_base()
+                noexcept
                 : _m_node_count(0)
             { }
 
             constexpr
+            ~_size_base() 
+                noexcept
+                = default;
+
+            constexpr
             void _m_reset()
                 noexcept
-            {
-                this->_m_node_count = 0;
-            }
+            { this->_m_node_count = 0; }
 
             /***************************************************
              * size-modifiers.
@@ -196,9 +218,7 @@ namespace tl
             constexpr
             void _m_inc_size(_m_size_t _n = 1)
                 noexcept
-            {
-                this->_m_node_count += _n;
-            }
+            { this->_m_node_count += _n; }
 
             constexpr
             void _m_dec_size(_m_size_t _n = 1)
@@ -231,13 +251,13 @@ namespace tl
             { return this->_m_node_count == 0; }
         };
 
-        /***************************************************
-         * @brief supplies basic copying/erasure/comparing
+        /********************************************************
+         * @brief supplies copying, erasure and comparing
          *        methods that recursively operate on nodes.
-         ***************************************************/
+         ********************************************************/
         template <typename NodeT,
                   typename AllocT>
-        class _basic_tree_base
+        class _tree_base
             : public _alloc_base<NodeT, AllocT>
             , public _size_base<AllocT>
         {
@@ -263,6 +283,17 @@ namespace tl
             using _m_hook_t = typename _m_node_traits_t::_m_hook_t;
 
             /***************************************************
+             * special-member-functions, use from alloc-base.
+             ***************************************************/
+
+            using _m_alloc_base_t::_m_alloc_base_t;
+
+            constexpr
+            ~_tree_base() 
+                _treelib_noexcept_if(this->~_m_alloc_base_t())
+                = default;
+            
+            /***************************************************
              * recursive node-operations.
              ***************************************************/
 
@@ -276,7 +307,7 @@ namespace tl
              ***************************************************/
             constexpr
             void _m_erase_children(_m_node_ptr_t _node)
-                noexcept
+                noexcept(_treelib_noexcept_iterable(_m_node_traits_t::_s_children(_node)))
             {
                 assert(_node != nullptr);
                 for (_m_node_ptr_t _child 
@@ -286,62 +317,80 @@ namespace tl
                 this->_m_dec_size();
             }
 
-            /***************************************************
-             * @brief helper function to construct and hook
-             *        a new node from the value of an
-             *        initializer-node.
-             *        used in the corresponding constructors
-             *        of '_root_base' and '_header_base'
-             ***************************************************/
-            constexpr void 
-            _m_insert_init(_m_hook_t _at,
-                           _m_node_ptr_t _where, 
-                           _m_init_node_base_cref_t _src)
-            {
-                _m_node_ptr_t _new_node 
-                    = this->_m_new_node(static_cast<_m_init_node_cref_t>(_src)._m_value());
-                _m_node_traits_t::_s_hook_at(_where, _at, _new_node);
-                this->_m_inc_size();
-            }
-            
-            /***************************************************
-             * @brief helper function to construct and hook
-             *        a new node from the value of an existing
-             *        node. used in '_m_copy_children'.
-             ***************************************************/
-            constexpr void 
-            _m_insert_copy(_m_hook_t _at,
-                           _m_node_ptr_t _where, 
-                           _m_cnode_ptr_t _src)
-            {
-                _m_node_ptr_t _new_node 
-                    = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(_src)->_m_value());
-                _m_node_traits_t::_s_hook_at(_where, _at, _new_node);
-                this->_m_inc_size();
-            }
-
-            /***************************************************
-             * @brief recursively copies all child-nodes
+            /********************************************************
+             * @brief recursively copies all values of child-nodes
              *        of the passed node and mimics the structure
              *        of the source-node.
              * @note  _dest itself is not copied and can 
              *        therefore be a valueless header-node.
              *        all children must be static_cast-able to
              *        _m_vnode_ptr_t. the destination-node
-             *        has to satisfy _copyable_node because it
+             *        has to satisfy _mimicable_tree_node because it
              *        needs to provide .mimic() to build the
              *        copied structure.
-             ***************************************************/
+             ********************************************************/
             constexpr void
             _m_copy_children(_m_node_ptr_t _dest, _m_cnode_ptr_t _src)
-                requires _copyable_tree_node<_m_node_t>
+                requires _mimicable_tree_node<_m_node_t>
             {
                 // capture this-pointer to insert into this tree
-                auto _insert_fn = [&](_m_hook_t _at,
-                                      _m_node_ptr_t _where, 
-                                      _m_cnode_ptr_t _src) 
-                                  { this->_m_insert_copy(_at, _where, _src); };
-                _m_node_traits_t::_s_mimic(_dest, _src, _insert_fn);
+                auto _insert_fn = [&](_m_cnode_ptr_t _src) 
+                                  { 
+                                    _m_node_ptr_t _new_node 
+                                    = this->_m_new_node(static_cast<_m_cvnode_ptr_t>(_src)->_m_value());
+                                    this->_m_inc_size();
+                                    return _new_node;
+                                  };
+                auto _erase_fn  = [&](_m_node_ptr_t _node)
+                                  { 
+                                    this->_m_erase_children(_node);
+                                    this->_m_put_node(static_cast<_m_vnode_ptr_t>(_node));
+                                    this->_m_dec_size();
+                                  };
+                auto _assign_fn = [&](_m_node_ptr_t _dest, _m_cnode_ptr_t _src)
+                                  {
+                                    static_cast<_m_vnode_ptr_t>(_dest)->_m_value()
+                                        = static_cast<_m_cvnode_ptr_t>(_src)->_m_value();
+                                  };
+                _m_node_traits_t::_s_mimic(_dest, _src, _insert_fn, _erase_fn, _assign_fn);
+            }
+
+            /********************************************************
+             * @brief recursively moves all values of child-nodes
+             *        of the passed node and mimics the structure
+             *        of the source-node.
+             * @note  _dest itself is not copied and can 
+             *        therefore be a valueless header-node.
+             *        all children must be static_cast-able to
+             *        _m_vnode_ptr_t. the destination-node
+             *        has to satisfy _mimicable_tree_node because it
+             *        needs to provide .mimic() to build the
+             *        copied structure.
+             ********************************************************/
+            constexpr void
+            _m_move_children(_m_node_ptr_t _dest, _m_cnode_ptr_t _src)
+                requires _mimicable_tree_node<_m_node_t>
+            {
+                // capture this-pointer to insert into this tree
+                auto _insert_fn = [&](_m_cnode_ptr_t _src) 
+                                  { 
+                                    _m_node_ptr_t _new_node 
+                                    = this->_m_new_node(std::move(static_cast<_m_cvnode_ptr_t>(_src)->_m_value()));
+                                    this->_m_inc_size();
+                                    return _new_node;
+                                  };
+                auto _erase_fn  = [&](_m_node_ptr_t _node)
+                                  { 
+                                    this->_m_erase_children(_node);
+                                    this->_m_put_node(static_cast<_m_vnode_ptr_t>(_node));
+                                    this->_m_dec_size();
+                                  };
+                auto _assign_fn = [&](_m_node_ptr_t _dest, _m_cnode_ptr_t _src)
+                                  {
+                                    static_cast<_m_vnode_ptr_t>(_dest)->_m_value()
+                                        = std::move(static_cast<_m_cvnode_ptr_t>(_src)->_m_value());
+                                  };
+                _m_node_traits_t::_s_mimic(_dest, _src, _insert_fn, _erase_fn, _assign_fn);
             }
 
             /***************************************************
@@ -357,12 +406,16 @@ namespace tl
              ***************************************************/
             constexpr void
             _m_init_children(_m_node_ptr_t _dest, _m_init_node_base_cref_t _init)
+                requires _initializer_compatible<_m_node_t, _m_init_node_base_t>
             {
                 // capture this-pointer to insert into this tree
-                auto _insert_fn = [&](_m_hook_t _at,
-                                      _m_node_ptr_t _where,
-                                      _m_init_node_base_cref_t _init)
-                                  { this->_m_insert_init(_at, _where, _init); };
+                auto _insert_fn = [&](_m_init_node_base_cref_t _init)
+                                  { 
+                                    _m_node_ptr_t _new_node 
+                                    = this->_m_new_node(static_cast<_m_init_node_cref_t>(_init)._m_value());
+                                    this->_m_inc_size();
+                                    return _new_node;
+                                  };
                 _m_node_traits_t::_s_mimic_initializer(_dest, _init, _insert_fn);
             }
 
@@ -382,12 +435,12 @@ namespace tl
             static constexpr bool 
             _s_compare_children(_m_cnode_ptr_t _a, _m_cnode_ptr_t _b)
             {
-                decltype(auto) _a_children = _m_node_traits_t::_s_children(_a);
-                decltype(auto) _b_children = _m_node_traits_t::_s_children(_b);
-                
                 if (_m_node_traits_t::_s_child_count(_a)
                     != _m_node_traits_t::_s_child_count(_b))
                     return false;
+
+                decltype(auto) _a_children = _m_node_traits_t::_s_children(_a);
+                decltype(auto) _b_children = _m_node_traits_t::_s_children(_b);
 
                 auto _a_beg = std::ranges::begin(_a_children);
                 auto _a_end = std::ranges::end(_a_children);
@@ -404,40 +457,39 @@ namespace tl
                 }
                 return true;
             }
-
-        public:
-            
-            using _m_alloc_base_t::_m_alloc_base_t;
         };
 
-        /***************************************************
+        /********************************************************
          * @brief base-class for trees which should
          *        originate from a single value-holding
          *        root-node.
          *
-         *        this is convenient for e.g. binary trees, in
-         *        which a construct with a header-node
-         *        is kind of uncomfortable to handle, because
-         *        the header-node would make any tree the
-         *        left/right subtree of that node.
-         ***************************************************/
+         * @details this is desired for e.g. binary trees,
+         *          where a construct with a header-node
+         *          is kind of uncomfortable to handle because
+         *          the header-node would make any tree the
+         *          left/right subtree of that node, without
+         *          really adding any functionality.
+         ********************************************************/
         template <typename NodeT,
                   typename AllocT>
-        class _root_base
-            : public _basic_tree_base<NodeT, AllocT>
+        class _root_tree_base
+            : public _tree_base<NodeT, AllocT>
         {
         protected:
 
-            using _m_base_t = _basic_tree_base<NodeT, AllocT>;
+            using _m_base_t = _tree_base<NodeT, AllocT>;
 
             using typename _m_base_t::_m_value_t;
             using typename _m_base_t::_m_node_t;
             using typename _m_base_t::_m_node_ptr_t;
+            using typename _m_base_t::_m_vnode_ptr_t;
             using typename _m_base_t::_m_cnode_ptr_t;
             using typename _m_base_t::_m_cvnode_ptr_t;
             using typename _m_base_t::_m_size_t;
             using typename _m_base_t::_m_node_traits_t;
             using typename _m_base_t::_m_alloc_t;
+            using typename _m_base_t::_m_node_alloc_traits_t;
 
             using _m_init_tree_t = _root_initializer_tree<_m_value_t>;
             using typename _m_base_t::_m_hook_t;
@@ -445,6 +497,19 @@ namespace tl
             using typename _m_base_t::_m_init_node_base_t;
 
             _m_node_ptr_t _m_root;
+
+            /*****************************************
+             * special-member-functions, protected.
+             *****************************************/
+            constexpr
+            _root_tree_base()
+                : _m_root(nullptr)
+            { }
+
+            constexpr
+            ~_root_tree_base()
+                _treelib_noexcept_if(this->clear())
+            { this->clear(); }
 
             constexpr
             void _m_reset()
@@ -464,7 +529,7 @@ namespace tl
             _m_begin(ArgsTs&&... _args)
                 const
             { return _iter_traits<IterT>::_s_root_begin(this->_m_root_node(), std::forward<ArgsTs>(_args)...); }
-            
+
         public:
 
             using typename _m_base_t::value_type;
@@ -473,56 +538,44 @@ namespace tl
 
             using _m_base_t::_m_base_t;
 
-            constexpr
-            _root_base()
-                : _m_root(nullptr)
-            { }
-
             /***************************************************
-             * @brief constructor (3).
-             *        directly insert a value 
+             * @brief directly insert a value 
              *        at the root of the tree.
              ***************************************************/
             constexpr
-            _root_base(const value_type& value, 
-                       const allocator_type& alloc = allocator_type())
-                : _root_base(alloc)
-            {
-                this->insert_root(value);
-            }
+            _root_tree_base(const value_type& value, 
+                            const allocator_type& alloc = allocator_type())
+                : _root_tree_base(alloc)
+            { this->insert_root(value); }
 
             /***************************************************
-             * @brief constructor (4).
-             *        directly move a value
+             * @brief directly move a value
              *        to the root of the tree.
              ***************************************************/
             constexpr
-            _root_base(value_type&& value, 
-                       const allocator_type& alloc = allocator_type())
-                : _root_base(alloc)
-            {
-                this->emplace_root(value);
-            }
+            _root_tree_base(value_type&& value, 
+                            const allocator_type& alloc = allocator_type())
+                : _root_tree_base(alloc)
+            { this->emplace_root(value); }
 
             /***************************************************
-             * @brief constructor (5).
-             *        construct from an initializer-tree.
+             * @brief construct from an initializer-tree.
              ***************************************************/
             constexpr
-            _root_base(initializer_tree_type init,
-                       const allocator_type& alloc = allocator_type())
+            _root_tree_base(initializer_tree_type init,
+                            const allocator_type& alloc = allocator_type())
                 requires _initializer_compatible<_m_node_t, _m_init_node_base_t>
-                : _root_base(init._m_root._m_value(), alloc)
-            {
-                this->_m_init_children(this->_m_root, init._m_root);
-            }
+                : _root_tree_base(init._m_root._m_value(), alloc)
+            { this->_m_init_children(this->_m_root, init._m_root); }
 
             /***************************************************
-             * @brief copy-constructor and assignment-operator.
+             * @brief copy-constructor which recursively copies
+             *        the tree's nodes.
              ***************************************************/
             constexpr
-            _root_base(const _root_base& other)
-                : _root_base(other.get_allocator())
+            _root_tree_base(const _root_tree_base& other)
+                : _root_tree_base
+                (_m_node_alloc_traits_t::select_on_container_copy_construction(other._m_node_alloc))
             { 
                 if (other.empty())
                     return;
@@ -530,43 +583,101 @@ namespace tl
                 this->_m_copy_children(this->_m_root, other._m_root);
             }
 
-            constexpr _root_base&
-            operator=(const _root_base& other)
+            /***************************************************
+             * @brief copy-assignment which clears this tree
+             *        and recursively copies the other's nodes.
+             ***************************************************/
+            constexpr _root_tree_base&
+            operator=(const _root_tree_base& other)
             {
-                this->clear(); 
-                if (other.empty())
-                    return *this;
-                this->emplace_root(static_cast<_m_cvnode_ptr_t>(other._m_root)->_m_value());
-                this->_m_copy_children(this->_m_root, other._m_root);
+                if constexpr (_m_node_alloc_traits_t::propagate_on_container_copy_assignment::value)
+                {
+                    if (this->_m_node_alloc != other._m_node_alloc)
+                    {
+                        // replacement-allocator cannot free existing storage
+                        if (!other.empty())
+                        {
+                            this->emplace_root(static_cast<_m_cvnode_ptr_t>(other._m_root)->_m_value());
+                            this->_m_copy_children(this->_m_root, other._m_root);
+                        }
+                        this->_m_node_alloc = other._m_node_alloc;
+                    }
+                    else
+                    {
+                        // use new allocator for deallocation
+                        this->_m_node_alloc = other._m_node_alloc;
+                        if (!other.empty())
+                        {
+                            this->emplace_root(static_cast<_m_cvnode_ptr_t>(other._m_root)->_m_value());
+                            this->_m_copy_children(this->_m_root, other._m_root);
+                        }
+                    }
+                }
+                else // keep the current allocator otherwise
+                { 
+                    if (!other.empty())
+                    {
+                        this->emplace_root(static_cast<_m_cvnode_ptr_t>(other._m_root)->_m_value());
+                        this->_m_copy_children(this->_m_root, other._m_root);
+                    }
+                }
                 return *this;
             }
 
             /***************************************************
-             * @brief move-constructor and assignment-operator.
+             * @brief move-constructor. defaulted, which brings
+             *        the newly created tree into a a state
+             *        where it's contents are identical to the
+             *        moved-from tree.
+             *        the moved-from tree will be in a valid
+             *        but unspecified state.
              ***************************************************/
             constexpr
-            _root_base(_root_base&& other)
-                : _root_base(other.get_allocator())
-            { 
-                // refactor to somehow automatically swap stuff
-                std::swap(this->_m_root, other._m_root);
-                std::swap(this->_m_node_count, other._m_node_count);
-            }
+            _root_tree_base(_root_tree_base&& other)
+                noexcept 
+                = default;
 
-            constexpr _root_base&
-            operator=(_root_base&& other)
+            /***************************************************
+             * @brief move-assignment, which clears and brings
+             *        the this tree into a a state
+             *        where it's contents are identical to the
+             *        moved-from tree.
+             *        moves the allocator if 
+             *
+             *        the moved-from tree will be in a valid
+             *        but unspecified state.
+             ***************************************************/
+            constexpr _root_tree_base&
+            operator=(_root_tree_base&& other)
             {
+                if constexpr (!_m_node_alloc_traits_t::propagate_on_container_move_assignment::value)
+                {
+                    if (this->_m_node_alloc != other._m_node_alloc)
+                    {
+                        // The rvalue's allocator cannot be moved, or is not equal,
+		                // so we need to individually move each element.
+                        if (!other.empty())
+                        {
+                            this->emplace_root(std::move(static_cast<_m_cvnode_ptr_t>(other._m_root)->_m_value()));
+                            this->_m_move_children(this->_m_root, other._m_root);
+                        }
+                        return *this;
+                    }
+                }
                 this->clear();
-                std::swap(this->_m_root, other._m_root);
-                std::swap(this->_m_node_count, other._m_node_count);
+                this->_m_root       = std::move(other._m_root);
+                this->_m_node_count = std::move(other._m_node_count);
+                this->_m_node_alloc = std::move(other._m_node_alloc);
                 return *this;
             }
 
             /***************************************************
              * @brief construct a node in-place, as
-             *        the root of the tree.
-             * @throws tl::modification_error if the tree
-             *         already has a root-node (is non-empty). 
+             *        the root of the tree. 
+             * @note  if the tree already has a root-node
+             *        the value will be copy-assigned from 
+             *        the arguments and all child-nodes 
+             *        will remain unmodified. 
              ***************************************************/
             template <typename... Args>
                 requires std::constructible_from<value_type, Args...>
@@ -574,21 +685,24 @@ namespace tl
             emplace_root(Args&&... args)
             {
                 if (!this->empty())
-                    throw tl::modification_error("tree already has a root-node");
-                this->_m_root = this->_m_new_node(std::forward<Args>(args)...);
-                this->_m_inc_size();
+                    static_cast<_m_vnode_ptr_t>(this->_m_root)->_m_value() 
+                        = _m_value_t(std::forward<Args>(args)...);
+                else
+                {
+                    this->_m_root = this->_m_new_node(std::forward<Args>(args)...);
+                    this->_m_inc_size();
+                }
             }
 
-            /***************************************************
+            /********************************************************
              * @brief insert to the root of the tree.
-             * @throws tl::modification_error if the tree
-             *         already has a root-node (is non-empty). 
-             ***************************************************/
+             * @note  if the tree already has a root-node
+             *        the value will be copy-assigned 
+             *        and all child-nodes will remain unmodified. 
+             ********************************************************/
             constexpr void
             insert_root(const value_type& value)
-            {
-                return this->emplace_root(value);
-            }
+            { return this->emplace_root(value); }
 
             /***************************************************
              * @brief clears the contents.
@@ -597,24 +711,28 @@ namespace tl
             clear() 
                 noexcept
             {
-                this->_m_erase_children(this->_m_root);
+                if (!this->empty())
+                {
+                    this->_m_erase_children(this->_m_root_node());
+                    this->_m_put_node(static_cast<_m_vnode_ptr_t>(this->_m_root_node()));
+                }
                 this->_m_reset();
             }
 
-            /***************************************************
+            /*************************************************************
              * @brief compares trees based on their structure
              *        and values held inside the nodes.
              *        
-             *        trees compare equal if their structure
-             *        is equal and each node has the same value
-             *        than it's 'structural counterpart' in the
-             *        other tree (i.e. rootA same rootB, first-childA
-             *        same as first-childB, ...).
-             ***************************************************/
+             * @details trees compare equal if their structure
+             *          is equal and each node has the same value
+             *          than it's 'structural counterpart' in the
+             *          other tree (i.e. rootA == rootB && first-childA
+             *          == first-childB && ...).
+             *************************************************************/
             template <typename OtherAllocT>
             friend constexpr bool
-            operator==(const _root_base& a,
-                       const _root_base<_m_node_t, OtherAllocT>& b)
+            operator==(const _root_tree_base& a,
+                       const _root_tree_base<_m_node_t, OtherAllocT>& b)
             { 
                 return _m_base_t::_s_compare(
                             static_cast<_m_cvnode_ptr_t>(a._m_root_node()), 
@@ -623,27 +741,27 @@ namespace tl
             }
         };
 
-        /***************************************************
+        /********************************************************
          * @brief base-class for trees which should
          *        originate from a valueless-header-node.
          *
-         *        this is convenient for e.g. rose-trees, in 
-         *        which a construct without a header-node could
+         *        this is convenient for e.g. rose-trees
+         *        where construct without a header-node could
          *        lead to an invalid tree-state/node-leaks.
          *
          *        for example, if you would insert a
-         *        next-sibling at the value-holding root-node,
-         *        there would be no parent-node holding
-         *        ownership for that node.
-         ***************************************************/
+         *        next-sibling at the value-holding root-node
+         *        for @see tl::listrose_tree, there would be no 
+         *        parent-node holding ownership for that node.
+         ********************************************************/
         template <typename NodeT,
                   typename AllocT>
-        class _header_base
-            : public _basic_tree_base<NodeT, AllocT>
+        class _header_tree_base
+            : public _tree_base<NodeT, AllocT>
         {
         protected:
 
-            using _m_base_t = _basic_tree_base<NodeT, AllocT>;
+            using _m_base_t = _tree_base<NodeT, AllocT>;
 
             using typename _m_base_t::_m_value_t;
             using typename _m_base_t::_m_node_t;
@@ -685,27 +803,31 @@ namespace tl
                 const
             { return _iter_traits<IterT>::_s_header_begin(this->_m_root_node(), std::forward<ArgsTs>(_args)...); }
 
+            constexpr
+            ~_header_tree_base()
+            { this->clear(); }
+
         public:
 
             using initializer_tree_type = _m_init_tree_t;
             using typename _m_base_t::allocator_type;
 
             constexpr
-            _header_base()
+            _header_tree_base()
                 requires std::default_initializable<_m_node_t>
                 : _m_base_t()
                 , _m_header()
             { }
 
             constexpr
-            _header_base()
+            _header_tree_base()
                 requires _dynamic_tree_node<_m_node_t>
                 : _m_base_t()
                 , _m_header(this->_m_node_alloc)
             { }
 
             constexpr
-            _header_base(const allocator_type& alloc)
+            _header_tree_base(const allocator_type& alloc)
                 requires _dynamic_tree_node<_m_node_t>
                 : _m_base_t(alloc)
                 , _m_header(this->_m_node_alloc)
@@ -716,10 +838,10 @@ namespace tl
              *        construct from an initializer-tree.
              ***************************************************/
             constexpr
-            _header_base(initializer_tree_type init,
+            _header_tree_base(initializer_tree_type init,
                          const allocator_type& alloc = allocator_type())
                 requires _initializer_compatible<_m_node_t, _m_init_node_base_t>
-                : _header_base(alloc)
+                : _header_tree_base(alloc)
             {
                 this->_m_init_children(std::addressof(this->_m_header), init._m_header);
             }
@@ -728,8 +850,8 @@ namespace tl
              * @brief copy-constructor and assignment-operator.
              ***************************************************/
             constexpr
-            _header_base(const _header_base& other)
-                : _header_base(other.get_allocator())
+            _header_tree_base(const _header_tree_base& other)
+                : _header_tree_base(other.get_allocator())
             { 
                 if (other.empty())
                     return;
@@ -737,8 +859,8 @@ namespace tl
                                        other._m_root_node());
             }
 
-            constexpr _header_base&
-            operator=(const _header_base& other)
+            constexpr _header_tree_base&
+            operator=(const _header_tree_base& other)
             {
                 this->clear(); 
                 if (other.empty())
@@ -752,16 +874,16 @@ namespace tl
              * @brief move-constructor and assignment-operator.
              ***************************************************/
             constexpr
-            _header_base(_header_base&& other)
-                : _header_base(other.get_allocator())
+            _header_tree_base(_header_tree_base&& other)
+                : _header_tree_base(other.get_allocator())
             { 
                 // refactor to somehow automatically swap stuff
                 std::swap(this->_m_header, other._m_header);
                 std::swap(this->_m_node_count, other._m_node_count);
             }
 
-            constexpr _header_base&
-            operator=(_header_base&& other)
+            constexpr _header_tree_base&
+            operator=(_header_tree_base&& other)
             {
                 this->clear();
                 std::swap(this->_m_header, other._m_header);
@@ -776,9 +898,8 @@ namespace tl
             clear() 
                 noexcept
             {
-                for (_m_node_ptr_t _child 
-                     : _m_node_traits_t::_s_children(this->_m_root_node()))
-                    this->_m_erase_children(_child);
+                if (!this->empty())
+                    this->_m_erase_children(this->_m_root_node());
                 this->_m_reset();
             }
 
@@ -794,8 +915,8 @@ namespace tl
              ***************************************************/
             template <typename OtherAllocT>
             friend constexpr bool
-            operator==(const _header_base& a,
-                       const _header_base<_m_node_t, OtherAllocT>& b)
+            operator==(const _header_tree_base& a,
+                       const _header_tree_base<_m_node_t, OtherAllocT>& b)
             { return _m_base_t::_s_compare_children(a._m_root_node(), b._m_root_node()); }
         };
 
@@ -807,22 +928,8 @@ namespace tl
          *        and std::forward_list (next/prev-pointers
          *        vs only next-pointer).
          *************************************************************/
-        template <typename NodeT,
-                  typename AllocT>
-        class _outward_tree_base
-        {
-
-        };
-
-        template <typename NodeT,
-                  typename AllocT>
-        class _tree_base
-        {
-
-        };
-
         template <typename BaseT>
-        class _outward_tree_mixin
+        class _outward_tree
             : public BaseT
         {
         protected:
@@ -844,10 +951,14 @@ namespace tl
             using _m_to_trav_t = _to_traversal_t<Trav, _m_node_t>;
 
             template <bool IsConst,
-                  bool IsLazy,
-                  traversal Trav,
-                  typename QueueAllocT>
-            using _m_queued_info_t = _queued_iter_info<IsConst, IsLazy, Trav, _m_value_t, _m_node_t, QueueAllocT>;
+                      queued Laziness,
+                      traversal Trav,
+                      typename QueueAllocT>
+            using _m_queued_info_t 
+                = _queued_iter_info<IsConst, Laziness, Trav, _m_value_t, _m_node_t, QueueAllocT>;
+
+            constexpr
+            ~_outward_tree() = default;
 
         public:
 
@@ -858,13 +969,13 @@ namespace tl
                 default_traversal = traversal::depth_first;
 
             template <traversal Trav,
-                      bool Laziness = true,
+                      queued Laziness = queued::lazy,
                       typename QueueAllocator = allocator_type>
             using any_queued_iterator
                 = _queued_iterator<_m_queued_info_t<false, Laziness, Trav, QueueAllocator>>;
 
             template <traversal Trav,
-                      bool Laziness = true,
+                      queued Laziness = queued::lazy,
                       typename QueueAllocator = allocator_type>
             using any_const_queued_iterator
                 = _queued_iterator<_m_queued_info_t<true, Laziness, Trav, QueueAllocator>>;
@@ -872,22 +983,22 @@ namespace tl
             template <traversal Trav, 
                       typename QueueAllocator = allocator_type>
             using lazy_queued_iterator 
-                = _queued_iterator<_m_queued_info_t<false, true, Trav, QueueAllocator>>;
+                = _queued_iterator<_m_queued_info_t<false, queued::lazy, Trav, QueueAllocator>>;
 
             template <traversal Trav, 
                       typename QueueAllocator = allocator_type>
             using const_lazy_queued_iterator 
-                = _queued_iterator<_m_queued_info_t<true, true, Trav, QueueAllocator>>;
+                = _queued_iterator<_m_queued_info_t<true, queued::lazy, Trav, QueueAllocator>>;
 
             template <traversal Trav, 
                       typename QueueAllocator = allocator_type>
             using greedy_queued_iterator 
-                = _queued_iterator<_m_queued_info_t<false, false, Trav, QueueAllocator>>;
+                = _queued_iterator<_m_queued_info_t<false, queued::greedy, Trav, QueueAllocator>>;
 
             template <traversal Trav, 
                       typename QueueAllocator = allocator_type>
             using const_greedy_queued_iterator 
-                = _queued_iterator<_m_queued_info_t<true, false, Trav, QueueAllocator>>;
+                = _queued_iterator<_m_queued_info_t<true, queued::greedy, Trav, QueueAllocator>>;
 
             template <traversal Trav, 
                       typename QueueAllocator = allocator_type>
@@ -916,14 +1027,6 @@ namespace tl
             using _m_base_t::_m_base_t;
 
             /***************************************************
-             * @brief destructor.
-             ***************************************************/
-            constexpr
-            ~_outward_tree_mixin()
-                noexcept
-            { this->clear(); }
-
-            /***************************************************
              * queued-iterators.
              ***************************************************/
 
@@ -939,7 +1042,7 @@ namespace tl
              * @returns a queued_iterator to the tree's root-node.
              ******************************************************************/
             template <traversal Trav,
-                      bool Laziness = true,
+                      queued Laziness = queued::lazy,
                       typename QueueAllocator = allocator_type>
             constexpr any_queued_iterator<Trav, Laziness, QueueAllocator> 
             qroot(const QueueAllocator& alloc = QueueAllocator())
@@ -960,7 +1063,7 @@ namespace tl
              * @returns a const_queued_iterator to the tree's root-node.
              ******************************************************************/
             template <traversal Trav,
-                      bool Laziness,
+                      queued Laziness = queued::lazy,
                       typename QueueAllocator = allocator_type>
             constexpr any_const_queued_iterator<Trav, Laziness, QueueAllocator> 
             cqroot(const QueueAllocator& alloc = QueueAllocator())
@@ -982,7 +1085,7 @@ namespace tl
              * @returns a queued_iterator to the beginning.
              ******************************************************************/
             template <traversal Trav,
-                      bool Laziness = true,
+                      queued Laziness = queued::lazy,
                       typename QueueAllocator = allocator_type>
             constexpr any_queued_iterator<Trav, Laziness, QueueAllocator> 
             qbegin(const QueueAllocator& alloc = QueueAllocator())
@@ -1003,7 +1106,7 @@ namespace tl
              * @returns a const_queued_iterator to the beginning.
              ******************************************************************/
             template <traversal Trav,
-                      bool Laziness = true,
+                      queued Laziness = queued::lazy,
                       typename QueueAllocator = allocator_type>
             constexpr any_const_queued_iterator<Trav, Laziness, QueueAllocator> 
             cqbegin(const QueueAllocator& alloc = QueueAllocator())
@@ -1025,7 +1128,7 @@ namespace tl
              * @returns a queued_iterator to the end.
              ******************************************************************/
             template <traversal Trav,
-                      bool Laziness = true,
+                      queued Laziness = queued::lazy,
                       typename QueueAllocator = allocator_type>
             constexpr any_queued_iterator<Trav, Laziness, QueueAllocator> 
             qend(const QueueAllocator& alloc = QueueAllocator())
@@ -1046,7 +1149,7 @@ namespace tl
              * @returns a const_queued_iterator to the end.
              ******************************************************************/
             template <traversal Trav,
-                      bool Laziness = true,
+                      queued Laziness = queued::lazy,
                       typename QueueAllocator = allocator_type>
             constexpr any_const_queued_iterator<Trav, Laziness, QueueAllocator> 
             cqend(const QueueAllocator& alloc = QueueAllocator())
@@ -1144,7 +1247,7 @@ namespace tl
              *        to another location in this tree.
              ***************************************************/
             constexpr void
-            splice_to(hook_type to, const_iterator pos, _outward_tree_mixin&& other)
+            splice_to(hook_type to, const_iterator pos, _outward_tree&& other)
                 noexcept
             {
 
@@ -1155,7 +1258,7 @@ namespace tl
              *        to another location in this tree.
              ***************************************************/
             constexpr void
-            splice_to(hook_type to, const_iterator pos, _outward_tree_mixin&& other, const_iterator src)
+            splice_to(hook_type to, const_iterator pos, _outward_tree&& other, const_iterator src)
                 noexcept
             {
 
@@ -1166,7 +1269,7 @@ namespace tl
              *        to a specified location in this tree.
              ***************************************************/
             constexpr void
-            insert_range(hook_type as, const_iterator dest, const_iterator src)
+            insert_subtree(hook_type as, const_iterator dest, const_iterator src)
             {
 
             }
@@ -1182,12 +1285,12 @@ namespace tl
         };
 
         template <typename BaseT>
-        struct _tree_mixin
-            : public _outward_tree_mixin<BaseT>
+        struct _tree
+            : public _outward_tree<BaseT>
         {
         protected:
 
-            using _m_base_t = _outward_tree_mixin<BaseT>;
+            using _m_base_t = _outward_tree<BaseT>;
             using typename _m_base_t::_m_node_t;
             using typename _m_base_t::_m_value_t;
 
@@ -1340,7 +1443,7 @@ namespace tl
              *        to another location in this tree.
              ***************************************************/
             constexpr void
-            splice(hook_type to, const_iterator pos, _tree_mixin&& other, const_iterator src)
+            splice(hook_type to, const_iterator pos, _tree&& other, const_iterator src)
                 noexcept
             {
 
@@ -1363,22 +1466,22 @@ namespace tl
         template <typename NodeT,
                   typename AllocT>
         using _root_outward_tree
-            = _outward_tree_mixin<_root_base<NodeT, AllocT>>;
+            = _outward_tree<_root_tree_base<NodeT, AllocT>>;
 
         template <typename NodeT,
                   typename AllocT>
         using _header_outward_tree
-            = _outward_tree_mixin<_header_base<NodeT, AllocT>>;
+            = _outward_tree<_header_tree_base<NodeT, AllocT>>;
 
         template <typename NodeT,
                   typename AllocT>
         using _root_tree
-            = _tree_mixin<_root_base<NodeT, AllocT>>;
+            = _tree<_root_tree_base<NodeT, AllocT>>;
 
         template <typename NodeT,
                   typename AllocT>
         using _header_tree
-            = _tree_mixin<_header_base<NodeT, AllocT>>;
+            = _tree<_header_tree_base<NodeT, AllocT>>;
     }
 }
 

@@ -5,7 +5,7 @@
  /***********************************************************************
   * @file   treelib/detail/base/node.hpp
   * @author Julian Benzel
-  * @date   25.09.2026
+  * @date   04.10.2026
   *
   * @brief   requirements, traits and extensions for node-types.
   *
@@ -119,7 +119,7 @@ namespace tl
          *        with copying-capabilities.
          ***************************************************/
         template <typename T>
-        concept _copyable_tree_node
+        concept _mimicable_tree_node
             = requires(T* t, const T* ct)
             {
                 /***************************************************
@@ -137,9 +137,13 @@ namespace tl
                  * ensure a full copy.
                  *
                  * '.mimic()' should essentially bring a
-                 * null-initialized node into a state
-                 * where it is structuraly identical
-                 * to the source-node.          
+                 * node into a state where it is structuraly 
+                 * identical to the source-node, requesting
+                 * insertions for new nodes, assignments
+                 * for existing nodes (as in
+                 * value-assignments, so that e.g. moving can
+                 * reuse existing nodes) and deletions
+                 * as required.    
                  *
                  * the function that will be passed to
                  * allow the implementation to specify where
@@ -148,7 +152,13 @@ namespace tl
                  * allocation fails, the tree will remain in
                  * a predictable state.
                  ***************************************************/
-                { t->_m_mimic(ct, [](typename T::_m_hook_t _at, T* _parent, const T* _src) -> void { }) };
+                { t->_m_mimic(ct,
+                              // insertion-function 
+                              [](const T* _src) -> T* { return nullptr; },
+                              // erasure-function
+                              [](T* _node) -> void { },
+                              // assignment-function
+                              [](T* _dest, const T* _src) -> void { }) };
             };
 
         /*********************************************************************************
@@ -636,6 +646,36 @@ namespace tl
                 _treelib_noexcept_if(std::ranges::empty(_node->_m_children()))
             { return std::ranges::empty(_node->_m_children()); }
 
+            // forward call to member-function if present
+            static constexpr bool 
+            _s_is_left_leaf(_m_cptr_t _node)
+                _treelib_noexcept_if(_node->_m_is_left_leaf())
+                requires (_ordered_tree_node<_m_node_t> 
+                          && _treelib_has_member(_m_cref_t, _m_is_left_leaf))
+            { return _node->_m_is_left_leaf(); }
+
+            // SFINAE fallback
+            static constexpr bool
+            _s_is_left_leaf(_m_cptr_t _node)
+                _treelib_noexcept_if(std::ranges::empty(_node->_m_left_children()))
+                requires _ordered_tree_node<_m_node_t>
+            { return std::ranges::empty(_node->_m_left_children()); }
+
+            // forward call to member-function if present
+            static constexpr bool 
+            _s_is_right_leaf(_m_cptr_t _node)
+                _treelib_noexcept_if(_node->_m_is_right_leaf())
+                requires (_treelib_has_member(_m_cref_t, _m_is_right_leaf)
+                          && _ordered_tree_node<_m_node_t>)
+            { return _node->_m_is_right_leaf(); }
+
+            // SFINAE fallback
+            static constexpr bool
+            _s_is_right_leaf(_m_cptr_t _node)
+                _treelib_noexcept_if(std::ranges::empty(_node->_m_right_children()))
+                requires _ordered_tree_node<_m_node_t>
+            { return std::ranges::empty(_node->_m_right_children()); }
+
             static constexpr bool
             _s_is_root(_m_cptr_t _node)
                 _treelib_noexcept_if(_node->_m_parent())
@@ -771,6 +811,18 @@ namespace tl
                 _treelib_noexcept_if(_node->_m_children())
             { return _node->_m_children(); }
 
+            static constexpr decltype(auto)
+            _s_left_children(_m_cptr_t _node)
+                _treelib_noexcept_if(_node->_m_left_children())
+                requires _ordered_tree_node<_m_node_t>
+            { return _node->_m_left_children(); }
+
+            static constexpr decltype(auto)
+            _s_right_children(_m_cptr_t _node)
+                _treelib_noexcept_if(_node->_m_right_children())
+                requires _ordered_tree_node<_m_node_t>
+            { return _node->_m_right_children(); }
+
             static constexpr _m_ptr_t
             _s_parent(_m_cptr_t _node)
                 _treelib_noexcept_if(_node->_m_parent())
@@ -783,8 +835,27 @@ namespace tl
                          && _treelib_noexcept_first_readable(_s_children(_node)))
             {
                 assert(!_s_is_leaf(_node));
-                decltype(auto) _children = _s_children(_node);
-                return *std::ranges::begin(_children);
+                return std::views::all(_s_children(_node)).front();
+            }
+
+            static constexpr _m_ptr_t
+            _s_first_left_child(_m_cptr_t _node)
+                noexcept(noexcept(_s_is_left_leaf(_node))
+                         && _treelib_noexcept_first_readable(_s_left_children(_node)))
+                requires _ordered_tree_node<_m_node_t>
+            {
+                assert(!_s_is_left_leaf(_node));
+                return std::views::all(_s_left_children(_node)).front();
+            }
+
+            static constexpr _m_ptr_t
+            _s_first_right_child(_m_cptr_t _node)
+                noexcept(noexcept(_s_is_right_leaf(_node))
+                         && _treelib_noexcept_first_readable(_s_right_children(_node)))
+                requires _ordered_tree_node<_m_node_t>
+            {
+                assert(!_s_is_right_leaf(_node));
+                return std::views::all(_s_right_children(_node)).front();
             }
 
             static constexpr _m_ptr_t
@@ -793,8 +864,27 @@ namespace tl
                          && _treelib_noexcept_last_readable(_s_children(_node)))
             {
                 assert(!_s_is_leaf(_node));
-                decltype(auto) _children = _s_children(_node);
-                return *(std::prev(std::ranges::end(_children)));
+                return std::views::all(_s_children(_node)).back();
+            }
+
+            static constexpr _m_ptr_t
+            _s_last_left_child(_m_cptr_t _node)
+                noexcept(noexcept(_s_is_left_leaf(_node))
+                         && _treelib_noexcept_last_readable(_s_left_children(_node)))
+                requires _ordered_tree_node<_m_node_t>
+            {
+                assert(!_s_is_left_leaf(_node));
+                return std::views::all(_s_left_children(_node)).back();
+            }
+
+            static constexpr _m_ptr_t
+            _s_last_right_child(_m_cptr_t _node)
+                noexcept(noexcept(_s_is_right_leaf(_node))
+                         && _treelib_noexcept_last_readable(_s_right_children(_node)))
+                requires _ordered_tree_node<_m_node_t>
+            {
+                assert(!_s_is_right_leaf(_node));
+                return std::views::all(_s_right_children(_node)).back();;
             }
 
             // forward call to member-function if present
@@ -874,16 +964,18 @@ namespace tl
              * construction from initializer-nodes.
              ***************************************************/
 
-            template <typename FnT>
-                requires _copyable_tree_node<_m_node_t>
-                         && std::invocable<FnT, _m_hook_t, _m_ptr_t, _m_cptr_t>
+            template <typename InsertFnT, typename EraseFnT, typename AssignFnT>
+                requires _mimicable_tree_node<_m_node_t>
             static constexpr void
-            _s_mimic(_m_ptr_t _node, _m_cptr_t _src, FnT&& _insert_fn)
-            { _node->_m_mimic(_src, std::forward<FnT>(_insert_fn)); }
+            _s_mimic(_m_ptr_t _node, 
+                     _m_cptr_t _src, 
+                     InsertFnT&& _insert_fn,
+                     EraseFnT&& _erase_fn,
+                     AssignFnT&& _assign_fn)
+            { _node->_m_mimic(_src, _treelib_fwd(_insert_fn), _treelib_fwd(_erase_fn), _treelib_fwd(_assign_fn)); }
 
             template <typename InitT, typename FnT>
                 requires _initializer_compatible<_m_node_t, InitT>
-                         && std::invocable<FnT, _m_hook_t, _m_ptr_t, const InitT&>
             static constexpr void
             _s_mimic_initializer(_m_ptr_t _node, const InitT& _init, FnT&& _insert_fn)
             { _node->_m_mimic_initializer(_init, std::forward<FnT>(_insert_fn)); }

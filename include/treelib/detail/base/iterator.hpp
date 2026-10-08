@@ -62,7 +62,7 @@ namespace tl
         breadth_first
     };
 
-    enum struct queued_kind
+    enum struct queued
     {
         greedy,
         lazy
@@ -1595,7 +1595,7 @@ namespace tl
              ********************************************************/
             template <typename OtherInfoT, typename OtherIterT>
                 // either this is const, or both are mutable
-                requires (_m_info_t::_s_constness || !OtherIterT::_m_info_t::_s_constness)
+                requires (_m_info_t::_s_constness || !OtherInfoT::_s_constness)
             _convertible_iter(const _convertible_iter<OtherInfoT, OtherIterT>& other)
                 noexcept(std::is_nothrow_constructible_v<_m_base_t, _m_node_ptr_t>)
                 : _m_base_t(other._m_current())
@@ -1603,14 +1603,32 @@ namespace tl
         };
 
         /***************************************************
-         * @brief interface for retrieving meta-information
-         *        about a node in a tree (e.g. depth, 
-         *        child-count, siblings).
+         * @brief interface-type that exposes meta-
+         *        information about a node in a tree.
+         *
+         *        can be constructed from and 
+         *        converted into iterators (assuming the
+         *        constness allows it).
          ***************************************************/
-        template <typename NodeT>
-        struct _node_info
+        template <typename InfoT>
+        struct _node_meta
         {
-            
+        protected:
+
+            using _m_info_t = InfoT;
+            using _m_node_t = typename _m_info_t::_m_node_t;
+            using _m_node_traits_t = _node_traits<_m_node_t>;
+
+            using _m_node_ptr_t = typename _m_node_traits_t::_m_ptr_t;
+
+            _m_node_ptr_t _m_node;
+
+        public:
+
+            template <typename I, typename... Args>
+            constexpr I
+            to_iterator(Args&&... args)
+            { return _iter_traits<I>::_s_to_iter(this->_m_node, std::forward<Args>(args)...); }
         };
 
         /***************************************************
@@ -1626,7 +1644,7 @@ namespace tl
 
         /***************************************************
          * @brief iterator that visits every node that
-         *        is subordinate to a specified other node.
+         *        is a direct descendant of a select node.
          ***************************************************/
         template <typename ValueT,
                   typename NodeT>
@@ -1697,7 +1715,7 @@ namespace tl
          *        template-parameters together.
          ***************************************************/
         template <bool IsConst,
-                  bool IsLazy,
+                  queued Laziness,
                   traversal Trav,
                   typename ValueT,
                   typename NodeT,
@@ -1707,8 +1725,8 @@ namespace tl
             static constexpr bool
                 _s_constness = IsConst;
             
-            static constexpr bool
-                _s_laziness = IsLazy;
+            static constexpr queued
+                _s_laziness = Laziness;
 
             static constexpr traversal
                 _s_traversal = Trav;
@@ -1720,7 +1738,7 @@ namespace tl
             using _m_greedy_queued_base_t
                 = typename _m_trav_t::template _m_greedy_queued_base_t<_m_alloc_t>;
             using _m_queued_base_t 
-                = std::conditional_t<_s_laziness, 
+                = std::conditional_t<_s_laziness == queued::lazy, 
                         _m_lazy_queued_base_t, _m_greedy_queued_base_t>;
             using _m_node_t = NodeT;
             using _m_value_t = ValueT;
@@ -1735,16 +1753,16 @@ namespace tl
         struct _greedy_queued_iter_info
             : public InfoT
         { 
-            static constexpr bool
-                _s_laziness = false;
+            static constexpr queued
+                _s_laziness = queued::greedy;
         };
 
         template <typename InfoT>
         struct _lazy_queued_iter_info
             : public InfoT
         { 
-            static constexpr bool
-                _s_laziness = true;
+            static constexpr queued
+                _s_laziness = queued::lazy;
         };
 
         /***************************************************
@@ -1862,6 +1880,7 @@ namespace tl
         struct _iter_traits
         {
             using _m_iter_t     = IterT;
+            using _m_info_t     = typename _m_iter_t::_m_info_t;
             using _m_node_t     = typename _m_iter_t::_m_node_t;
             using _m_node_ptr_t = typename _m_iter_t::_m_node_ptr_t;
 
@@ -1899,12 +1918,32 @@ namespace tl
      ***************************************************/
 
     template <typename InfoT>
-    using greedy_queued_iterator
-        = _detail::_queued_iterator<_detail::_greedy_queued_iter_info<InfoT>>;
+    struct greedy_queued_iterator
+        : public _detail::_queued_iterator<_detail::_greedy_queued_iter_info<InfoT>>
+    { 
+    protected:
+        using _m_base_t = _detail::_queued_iterator<_detail::_greedy_queued_iter_info<InfoT>>;
+    public:
+        using _m_base_t::_m_base_t; 
+    };
+
+    template <typename InfoT, typename IterT>
+    greedy_queued_iterator(const _detail::_convertible_iter<InfoT, IterT>&)
+        -> greedy_queued_iterator<InfoT>;
 
     template <typename InfoT>
-    using lazy_queued_iterator
-        = _detail::_queued_iterator<_detail::_lazy_queued_iter_info<InfoT>>;
+    struct lazy_queued_iterator
+        : public _detail::_queued_iterator<_detail::_lazy_queued_iter_info<InfoT>>
+    { 
+    protected:
+        using _m_base_t = _detail::_queued_iterator<_detail::_lazy_queued_iter_info<InfoT>>;
+    public:
+        using _m_base_t::_m_base_t; 
+    };
+
+    template <typename InfoT, typename IterT>
+    lazy_queued_iterator(const _detail::_convertible_iter<InfoT, IterT>&)
+        -> lazy_queued_iterator<InfoT>;
 
     // default is lazy
     template <typename InfoT>
@@ -1914,6 +1953,12 @@ namespace tl
     template <typename InfoT>
     using traversing_iterator
         = _detail::_traversing_iterator<InfoT>;
+
+    template <typename InfoT>
+    using node_meta = _detail::_node_meta<InfoT>;
+
+    template <typename InfoT>
+    struct const_node_meta { };
 }
 
 #endif

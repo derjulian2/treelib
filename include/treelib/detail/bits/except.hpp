@@ -5,7 +5,7 @@
 /*********************************************************
  * @file   treelib/detail/bits/except.hpp
  * @author Julian Benzel
- * @date   25.09.2026
+ * @date   04.10.2026
  *
  * @brief  named exception-types to be used
  *         in tree-related contexts and helper-macros
@@ -26,7 +26,8 @@
 #include <ranges>
 
 /***************************************************
- * @brief helper-macroes noexcept-specifiers.
+ * @brief helper-macros conditional 
+ *        noexcept-specifiers.
  ***************************************************/
 
 #ifdef _treelib_no_exceptions
@@ -63,6 +64,9 @@ _treelib_expand0(_treelib_expand0(_treelib_expand0(_treelib_expand0(__VA_ARGS__)
  *          noexcept(noexcept(declval<type>().member(declval<args>()...)))
  *********************************************************************************/
 
+#define _treelib_fwd(_arg) std::forward<decltype(_arg)>(_arg)
+#define _treelib_fwds(_args) std::forward<decltype(_args)...>(_args)...
+
 #define _treelib_declval(_typename) \
     std::declval<_typename>()
 
@@ -74,22 +78,22 @@ _treelib_expand0(_treelib_expand0(_treelib_expand0(_treelib_expand0(__VA_ARGS__)
         noexcept(std::declval<_typename>()._membername(_treelib_declval_list(__VA_ARGS__)))
 
     #define _treelib_noexcept_if(_expr) \
-    noexcept(noexcept(_expr))
+        noexcept(noexcept(_expr))
 
     #define _treelib_noexcept_if_member(_typename, _methodname, ...) \
-    noexcept(_treelib_member_noexcept(_typename, _methodname, __VA_ARGS__))
+        noexcept(_treelib_member_noexcept(_typename, _methodname, __VA_ARGS__))
 
     #define _treelib_noexcept_if_member_iterable(_typename, _methodname, ...) \
-    noexcept( \
-        _treelib_member_noexcept(_typename, _methodname, __VA_ARGS__) \
-        && ::tl::_detail::_noexcept_iterable<decltype(std::declval<_typename>()._methodname(_treelib_declval_list(__VA_ARGS__)))> \
-    )
+        noexcept( \
+            _treelib_member_noexcept(_typename, _methodname, __VA_ARGS__) \
+            && ::tl::_detail::_noexcept_iterable<decltype(std::declval<_typename>()._methodname(_treelib_declval_list(__VA_ARGS__)))> \
+        )
 
     #define _treelib_noexcept_if_member_iterable_no_deref(_typename, _methodname, ...) \
-    noexcept( \
-        _treelib_member_noexcept(_typename, _methodname, __VA_ARGS__) \
-        && ::tl::_detail::_noexcept_iterable_no_deref<decltype(std::declval<_typename>()._methodname(_treelib_declval_list(__VA_ARGS__)))> \
-    )
+        noexcept( \
+            _treelib_member_noexcept(_typename, _methodname, __VA_ARGS__) \
+            && ::tl::_detail::_noexcept_iterable_no_deref<decltype(std::declval<_typename>()._methodname(_treelib_declval_list(__VA_ARGS__)))> \
+        )
 
     #define _treelib_noexcept_iterable(_expr) \
         ::tl::_detail::_noexcept_iterable<decltype(_expr)>
@@ -107,6 +111,8 @@ _treelib_expand0(_treelib_expand0(_treelib_expand0(_treelib_expand0(__VA_ARGS__)
     #define _treelib_noexcept_if(...)
     #define _treelib_noexcept_if_member(...)
     #define _treelib_noexcept_if_member_iterable(...)
+    #define _treelib_noexcept_iterable(_expr)
+    #define _treelib_noexcept_iterable_no_deref(_expr)
     #define _treelib_noexcept_first_readable(_expr) (false)
     #define _treelib_noexcept_last_readable(_expr) (false)
 #endif
@@ -148,6 +154,7 @@ namespace tl
          * @brief true if reading the first/last element of
          *        the range-type is noexcept.
          ********************************************************/
+
         template <typename R>
         concept _noexcept_first_readable
             = std::ranges::range<R>
@@ -159,24 +166,24 @@ namespace tl
             && noexcept(*std::prev(std::ranges::end(std::declval<R&>())));
     }
 
-    /***************************************************
+    /********************************************************
      * @brief error-type to be thrown on invalid
      *        navigation-operations during tree-traversal
      *        (e.g. trying to find the parent of the
      *         root-node).
-     ***************************************************/
+     ********************************************************/
     struct traversal_error 
         : public std::runtime_error
     { using std::runtime_error::runtime_error; };
 
 
-    /***************************************************
+    /********************************************************
      * @brief error-type to be thrown on invalid
      *        operations when modifying the structure
      *        of a tree (e.g. trying to erase a sub-branch
      *        where there is no actual node there and
      *        _treelib_no_exceptions is not defined).
-     ***************************************************/
+     ********************************************************/
     struct modification_error 
         : public std::runtime_error
     { using std::runtime_error::runtime_error; };

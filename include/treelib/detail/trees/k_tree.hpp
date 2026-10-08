@@ -121,26 +121,43 @@ namespace tl
                                             { return p != nullptr; });
             }
 
-            template <typename Fn>
-                requires std::invocable<Fn, _m_hook_t, _m_node_ptr_t, _m_cnode_ptr_t>
+            template <typename InsertFnT, typename EraseFnT, typename AssignFnT> 
             constexpr void
-            _m_mimic(_m_cnode_ptr_t _src, Fn&& _insert_fn)
+            _m_mimic(_m_cnode_ptr_t _src, 
+                     InsertFnT&& _insert_fn,
+                     EraseFnT&& _erase_fn,
+                     AssignFnT&& _assign_fn)
             {
+                _m_node_ptr_t _this_cur; 
+                _m_cnode_ptr_t _src_cur;
                 for (_m_hook_t _at = 0; _at < K; ++_at)
                 {
-                    _m_cnode_ptr_t cur = _src->_m_children_array[_at];
-                    if (cur != nullptr)
+                    _this_cur = this->_m_children_array[_at];
+                    _src_cur  = _src->_m_children_array[_at];
+                    // this has no node there but src does, insert new
+                    if (_this_cur == nullptr && _src_cur != nullptr)
+                        this->_m_children_array[_at] = _insert_fn(_src_cur);
+                    // this has node, but src does not, erase
+                    else if (_this_cur != nullptr && _src_cur == nullptr)
                     {
-                        _insert_fn(_at, this->_m_node_ptr(), cur); // assume that .hook_at will be called
-                        assert(this->_m_children_array[_at] != nullptr);
-                        this->_m_children_array[_at]->_m_mimic(cur, std::forward<Fn>(_insert_fn));
+                        _erase_fn(_this_cur);
+                        this->_m_children_array[_at] = nullptr;
                     }
+                    // both have nodes there, reuse memory and assign value
+                    else if (_this_cur != nullptr && _src_cur != nullptr)
+                        _assign_fn(_this_cur, _src_cur);
+
+                    // recursive mimic if not nullptr
+                    if (this->_m_children_array[_at] != nullptr)
+                        this->_m_children_array[_at]->_m_mimic(_src_cur, 
+                                    _treelib_fwd(_insert_fn),
+                                    _treelib_fwd(_erase_fn),
+                                    _treelib_fwd(_assign_fn));
                 }
             }
 
             template <typename InitT, typename FnT>
                 requires _initializer_node_interface<InitT>
-                         && std::invocable<FnT, _m_hook_t, _m_node_ptr_t, const InitT&>
             constexpr void 
             _m_mimic_initializer(const InitT& _init, FnT&& _insert_fn)
             {
@@ -149,9 +166,8 @@ namespace tl
                      _at < K && _it != _init._m_children().end(); 
                      ++_it, ++_at)
                 {
-                    _insert_fn(_at, this->_m_node_ptr(), *_it);
-                    assert(this->_m_children_array[_at] != nullptr);
-                    this->_m_children_array[_at]->_m_mimic_initializer(*_it, std::forward<FnT>(_insert_fn));
+                    this->_m_children_array[_at] = _insert_fn(*_it);
+                    this->_m_children_array[_at]->_m_mimic_initializer(*_it, _treelib_fwd(_insert_fn));
                 }
             }
         };
@@ -194,9 +210,7 @@ namespace tl
         struct _outward_k_node
             : public _outward_k_node_base<K>
         { 
-            using _outward_k_node_base<K>::_outward_k_node_base; 
 
-            friend _node_traits<_outward_k_node>;
         };
 
         template <std::size_t K>
@@ -207,10 +221,6 @@ namespace tl
             using typename _m_base_t::_m_node_t;
             using typename _m_base_t::_m_node_ptr_t;
             using typename _m_base_t::_m_cnode_ptr_t;
-
-            using _m_base_t::_m_base_t;
-
-            friend _node_traits<_k_node>;
 
             constexpr bool
             _m_is_root()
@@ -325,9 +335,15 @@ namespace tl
     template <typename T, 
               std::size_t K,
               typename Allocator = std::allocator<T>>
-    using outward_k_tree 
-        = _detail::_root_outward_tree<_detail::_outward_k_node<K>, Allocator>;
+    struct outward_k_tree 
+        : public _detail::_root_outward_tree<_detail::_outward_k_node<K>, Allocator>
+    {
+    protected:
+        using _m_base_t = _detail::_root_outward_tree<_detail::_outward_k_node<K>, Allocator>;
 
+    public:
+        using _m_base_t::_m_base_t;
+    };
     /******************************************************************
      * @brief   type-generic k-ary-tree container with
      *          constant-time insertion (neglecting optional
@@ -399,8 +415,15 @@ namespace tl
     template <typename T, 
               std::size_t K,
               typename Allocator = std::allocator<T>>
-    using k_tree 
-        = _detail::_root_tree<_detail::_k_node<K>, Allocator>;
+    struct k_tree 
+        : public _detail::_root_tree<_detail::_k_node<K>, Allocator>
+    { 
+    protected:
+        using _m_base_t = _detail::_root_tree<_detail::_k_node<K>, Allocator>;
+
+    public:
+        using _m_base_t::_m_base_t;
+    };
 }
 
 #endif

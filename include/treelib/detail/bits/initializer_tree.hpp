@@ -2,10 +2,10 @@
 #ifndef TREELIB_INITIALIZER_TREE_HPP
 #define TREELIB_INITIALIZER_TREE_HPP
 
-/*************************************************************
+/*******************************************************************************************
  * @file   treelib/detail/bits/initializer_tree.hpp
  * @author Julian Benzel
- * @date   25.09.2026
+ * @date   04.10.2026
  *
  * @brief  'std::initializer_list' for tree-types
  *         to allow some sleek tree-construction
@@ -18,7 +18,7 @@
  *            instances of 'std::vector'.
  *
  *          for trees to be constructible from
- *          'tl::initializer_tree' the respective
+ *          an initializer-tree the respective
  *          node-type requires a method that
  *          determines how a node should be
  *          constructed from an initializer and
@@ -48,7 +48,7 @@
  *          about this, it said this was a 'reasonable use'
  *          of 'std::initializer_list', not sure if i
  *          completely trust it, but sure.
- *************************************************************/
+ *******************************************************************************************/
 
 #include <treelib/detail/bits/except.hpp>
 
@@ -61,7 +61,7 @@ namespace tl
 {
     namespace _detail
     {
-        /********************************************************
+        /*************************************************************
          * @brief   concept to be used for template-argument
          *          'InitT' in 'node_traits::mimic_initializer'.
          *        
@@ -70,7 +70,7 @@ namespace tl
          *          exact type is not known to the node-types.
          *          this concept constrains the type to expose
          *          access to their child-initializer-nodes.
-         ********************************************************/
+         *************************************************************/
         template <typename T>
         concept _initializer_node_interface
             = requires (const T& ct)
@@ -89,23 +89,21 @@ namespace tl
             && requires (T* t, const InitT& inode)
             {
                 /***************************************************
-                 * @brief '.mimic_initializer()' should bring a
-                 *        null-initialized node into a state
-                 *        where it is structuraly identical
-                 *        to the initializer-node.          
+                 * '.mimic_initializer()' should bring a
+                 * null-initialized node into a state
+                 * where it is structuraly identical
+                 * to the initializer-node.          
                  *
-                 *        the function that will be passed to
-                 *        allow the implementation to specify where
-                 *        copies should go will be some form of
-                 *        tree.insert(...) to ensure that if
-                 *        allocation fails, the tree will remain in
-                 *        a predictable state.
+                 * the function that will be passed to
+                 * allow the implementation to specify where
+                 * copies should go will be some form of
+                 * tree.insert(...) to ensure that if
+                 * allocation fails, the tree will remain in
+                 * a predictable state.
                  *
-                 *        @see tl::_detail::_copyable_node for more.
+                 * @see tl::_detail::_mimicable_tree_node for more.
                  ***************************************************/
-                { t->_m_mimic_initializer(inode, [](typename T::_m_hook_t _at, 
-                                                    T* _parent, 
-                                                    const InitT& _src) -> void { }) };
+                { t->_m_mimic_initializer(inode, [](const InitT& _src) -> T* { return nullptr; }) };
             };
 
         /********************************************************
@@ -267,8 +265,8 @@ namespace tl
          *          ignore errors and try their best to
          *          construct a valid tree.
          ***************************************************/
-        template <typename ValueT>
-        using node = ::tl::_detail::_initializer_node<ValueT>;
+        template <typename T>
+        using node = ::tl::_detail::_initializer_node<T>;
 
         /***************************************************
          * @brief lightweight recursive initializer-list
@@ -310,7 +308,7 @@ namespace tl
          ***************************************************/
         template <typename T>
         using root_tree 
-            = _detail::_root_initializer_tree<T>;
+            = ::tl::_detail::_root_initializer_tree<T>;
 
         /********************************************************
          * @brief lightweight recursive initializer-list
@@ -361,7 +359,7 @@ namespace tl
          ********************************************************/
         template <typename T>
         using header_tree 
-            = _detail::_header_initializer_tree<T>;
+            = ::tl::_detail::_header_initializer_tree<T>;
         }
 }
 

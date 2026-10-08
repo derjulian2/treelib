@@ -37,6 +37,80 @@ where you set the variable `treelib_DIR` to the root of the cloned repo.
 - `tl::k_ary_tree`
 
 - `tl::outward_binary_tree`
+```c++
+      using namespace tl;
+      using tree_type = outward_binary_tree<int>;
+
+      using namespace initializers;
+
+      tree_type my_tree(
+          root_tree(
+              node(1,
+              {
+                  node(2,
+                  {
+                      node(3),
+                      node(4)
+                  }),
+                  node(5,
+                  {
+                      node(6),
+                      node(7)
+                  })
+              })
+          )
+      );
+      tree_type my_other_tree = my_tree;
+
+      // member-types
+      tree_type::value_type;
+      tree_type::pointer;
+      tree_type::const_pointer;
+      tree_type::reference;
+      tree_type::const_reference;
+
+      tree_type::allocator_type;
+      tree_type::size_type;
+      tree_type::hook_type;
+      tree_type::initializer_tree_type;
+
+      tree_type::iterator;
+      tree_type::const_iterator;
+
+      // information
+      (void)my_tree.size();
+      (void)my_tree.max_size();
+      (void)my_tree.empty();
+      (void)my_tree.get_allocator();
+      
+      // iterators
+      my_tree.begin();
+      my_tree.cbegin();
+      my_tree.end();
+      my_tree.cend();
+      my_tree.root();
+      my_tree.croot();
+
+      // queued-iterators
+      my_tree.qbegin<traversal::depth_first, queued::greedy>();
+      my_tree.cqbegin<traversal::breadth_first, queued::lazy>();
+      my_tree.qend<traversal::depth_first_post_order, queued::greedy>();
+      my_tree.cqend<traversal::depth_first, queued::lazy>();
+      my_tree.qroot<traversal::depth_first_in_order>();
+      my_tree.cqroot<traversal::depth_first>();
+
+      // modifiers
+      my_tree.emplace_root(2);
+      my_tree.insert_root(3);
+
+      my_tree.emplace(binary::left, my_tree.root(), 4);
+      my_tree.insert(binary::left, my_tree.root(), 4);
+      my_tree.insert_subtree(binary::left, my_tree.root(), ++my_tree.cqbegin<traversal::depth_first>());
+
+      my_tree.erase_at(binary::left, my_tree.root());
+      my_tree.splice_to(binary::left, my_tree.root(), std::move(my_other_tree));
+      my_tree.splice_to(binary::right, my_tree.root(), std::move(my_other_tree), ++my_other_tree.cbegin());
+```
 - `tl::binary_tree`
 
 # rose-trees
